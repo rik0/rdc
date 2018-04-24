@@ -1,0 +1,6 @@
+[package]
+name = "rdc"
+version = "0.1.0"
+authors = ["Enrico Franchi <enrico.franchi@gmail.com>"]
+
+[dependencies]
