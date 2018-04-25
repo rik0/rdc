@@ -1,4 +1,10 @@
 use std::io::Write;
+use std::str;
+use std::str::FromStr;
+use std::error;
+use std::error::Error;
+use std::f64;
+
 
 #[derive(Copy, Clone, Debug,PartialEq)]
 enum Instruction<T> {
@@ -62,6 +68,7 @@ enum Instruction<T> {
 enum ParserErrorType {
     IllegalState(String),
     InvalidCharacter(u8),
+    NumParseError(usize, usize, String),
 }
 
 #[derive(Clone,Debug,PartialEq)]
@@ -78,19 +85,18 @@ struct ParserError {
     error_type: ParserErrorType,
 }
 
-fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError> {
+fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError> 
+    where T: FromStr + Default,
+          <T as str::FromStr>::Err: error::Error
+{
     let mut state = ParserState::TopLevel;
     let mut instructions = Vec::new();
-    let mut col: usize = 0;
+    let mut position: usize = 0;
 
     if program_text.len() == 0 {
         return Ok(instructions);
     }
     loop {
-        if col >= program_text.len() {
-            state = ParserState::End;
-        }
-
         match state {
             ParserState::End => {
                 break
@@ -99,10 +105,21 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError> {
                 break
             }
             ParserState::TopLevel => {
-                let ch = program_text[col];
+                if position >= program_text.len() {
+                    break
+                }
+                let ch = program_text[position];
 
                 match ch {
                     0 => instructions.push(Instruction::Nop),
+                    b'.' => {
+                        // here we effectively consume one character, so we must go through the increment
+                        state = ParserState::Num{start: position, end: position+1, seen_dot: true};
+                    }
+                    b'0'...b'9' => {
+                        // here we effectively consume one character, so we must go through the increment
+                        state = ParserState::Num{start: position, end: position+1, seen_dot: false};
+                    }
                     b'p' => instructions.push(Instruction::PrintLN),
                     b'n' => instructions.push(Instruction::PrintPop),
                     b'P' => instructions.push(Instruction::PrettyPrint),
@@ -125,45 +142,89 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError> {
                     b'I' => instructions.push(Instruction::GetInputRadix),
                     b'O' => instructions.push(Instruction::GetOutputRadix),
                     b'K' => instructions.push(Instruction::GetPrecision),
+                    b' ' => {},
                     ch => {
-                        state = ParserState::Error(col, ParserErrorType::InvalidCharacter(ch));
+                        state = ParserState::Error(position, ParserErrorType::InvalidCharacter(ch));
                         continue;
                     }
                 }
 
-                col += 1;
+                position += 1;
             }
             ParserState::Num{start, end, seen_dot} => {
-                let ch = program_text[col];
-                match (seen_dot, ch) {
-                    (true, b'.') => {
+                if position >= program_text.len() {
+                    let chars = &program_text[start..end];
 
+                    match ascii_to_num::<T>(chars) {
+                        Ok(n) => {
+                            instructions.push(Instruction::Num(n));
+                            state = ParserState::End;
+                        }
+                        Err(reason) => {
+                            state = ParserState::Error(position, ParserErrorType::NumParseError(start, end, reason));
+                        }
                     }
-                    (false, b'.') => {
+                    break
 
+                }
+                let ch = program_text[position];
+                match (seen_dot, ch) {
+                    (false, b'.') => {
+                        // if we are here, we were alredy building a number and finally we got the .
+                        state = ParserState::Num{start, end: end+1, seen_dot: true};
+                        position += 1;
                     }
                     (_, b'0' ... b'9') => {
-
-
+                        state = ParserState::Num{start, end: end+1, seen_dot: true};
+                        position += 1;
                     }
-                    _ => {
+                    (true, b'.')|_ => {
+                        // it means it initiates a new number, store the old and start again
+                        // we must not advance the position: note that this means we are looping
+                        // a bit more than necessary, but it makes the logic simpler
+                        let chars = &program_text[start..end];
 
+                        match ascii_to_num::<T>(chars) {
+                            Ok(n) => {
+                                instructions.push(Instruction::Num(n));
+                                state = ParserState::TopLevel;
+                            }
+                            Err(reason) => {
+                                state = ParserState::Error(position, ParserErrorType::NumParseError(start, end, reason))
+                            }
+                        }
                     }
                 }
 
             }
         }
-        
     }
 
     return match state {
         ParserState::Error(position, error_type) => Err(ParserError{position, error_type}),
         ParserState::End => Ok(instructions),
-        ParserState::TopLevel => Err(ParserError{position: col, error_type: ParserErrorType::IllegalState("parsing stopped".to_string())}),
+        //ParserState::TopLevel => Err(ParserError{position: position, error_type: ParserErrorType::IllegalState("parsing stopped".to_string())}),
+        ParserState::TopLevel => Ok(instructions),
         _other => {
 
-            Err(ParserError{position: col, error_type: ParserErrorType::IllegalState("not sure".to_string())})
+            Err(ParserError{position: position, error_type: ParserErrorType::IllegalState("not sure".to_string())})
         }
+    }
+}
+
+fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String> 
+    where T: FromStr + Default,
+          <T as str::FromStr>::Err: error::Error
+{
+    return match str::from_utf8(bytes) {
+        Ok(".") => Ok(T::default()),
+        Ok(chars) => {
+            match T::from_str(chars) {
+                Ok(n) => Ok(n),
+                Err(error) => Err(error.description().to_string()),
+            }
+        }
+        Err(utf8error) => Err(utf8error.description().to_string())
     }
 }
 
@@ -183,28 +244,45 @@ parse_tests! {
     parse_test_empty: ("", Ok(vec![])),
     parse_test_invalid: ("z", Err(ParserError{position: 0, error_type: ParserErrorType::InvalidCharacter(b'z')})),
     parse_test_zero: ("\0", Ok(vec![Instruction::Nop])),
-    print_test_p: ("p", Ok(vec![Instruction::PrintLN])),
-    print_test_n: ("n", Ok(vec![Instruction::PrintPop])),
-    print_test_p2: ("P", Ok(vec![Instruction::PrettyPrint])),
-    print_test_f: ("f", Ok(vec![Instruction::PrintStack])),
-    print_test_add: ("+", Ok(vec![Instruction::Add])),
-    print_test_sub: ("-", Ok(vec![Instruction::Sub])),
-    print_test_mul: ("*", Ok(vec![Instruction::Mul])),
-    print_test_div: ("/", Ok(vec![Instruction::Div])),
-    print_test_mod: ("%", Ok(vec![Instruction::Mod])),
-    print_test_divmod: ("~", Ok(vec![Instruction::Divmod])),
-    print_test_exp: ("^", Ok(vec![Instruction::Exp])),
-    print_test_expmod: ("|", Ok(vec![Instruction::Modexp])),
-    print_test_v: ("v", Ok(vec![Instruction::Sqrt])),
-    print_test_c: ("c", Ok(vec![Instruction::Clear])),
-    print_test_d: ("d", Ok(vec![Instruction::Dup])),
-    print_test_r: ("r", Ok(vec![Instruction::Swap])),
-    print_test_i: ("i", Ok(vec![Instruction::SetInputRadix])),
-    print_test_o: ("o", Ok(vec![Instruction::SetOutputRadix])),
-    print_test_k: ("k", Ok(vec![Instruction::SetPrecision])),
-    print_test_i2: ("I", Ok(vec![Instruction::GetInputRadix])),
-    print_test_o2: ("O", Ok(vec![Instruction::GetOutputRadix])),
-    print_test_k2: ("K", Ok(vec![Instruction::GetPrecision])),
+    parse_test_p: ("p", Ok(vec![Instruction::PrintLN])),
+    parse_test_n: ("n", Ok(vec![Instruction::PrintPop])),
+    parse_test_p2: ("P", Ok(vec![Instruction::PrettyPrint])),
+    parse_test_f: ("f", Ok(vec![Instruction::PrintStack])),
+    parse_test_add: ("+", Ok(vec![Instruction::Add])),
+    parse_test_sub: ("-", Ok(vec![Instruction::Sub])),
+    parse_test_mul: ("*", Ok(vec![Instruction::Mul])),
+    parse_test_div: ("/", Ok(vec![Instruction::Div])),
+    parse_test_mod: ("%", Ok(vec![Instruction::Mod])),
+    parse_test_divmod: ("~", Ok(vec![Instruction::Divmod])),
+    parse_test_exp: ("^", Ok(vec![Instruction::Exp])),
+    parse_test_expmod: ("|", Ok(vec![Instruction::Modexp])),
+    parse_test_v: ("v", Ok(vec![Instruction::Sqrt])),
+    parse_test_c: ("c", Ok(vec![Instruction::Clear])),
+    parse_test_d: ("d", Ok(vec![Instruction::Dup])),
+    parse_test_r: ("r", Ok(vec![Instruction::Swap])),
+    parse_test_i: ("i", Ok(vec![Instruction::SetInputRadix])),
+    parse_test_o: ("o", Ok(vec![Instruction::SetOutputRadix])),
+    parse_test_k: ("k", Ok(vec![Instruction::SetPrecision])),
+    parse_test_i2: ("I", Ok(vec![Instruction::GetInputRadix])),
+    parse_test_o2: ("O", Ok(vec![Instruction::GetOutputRadix])),
+    parse_test_k2: ("K", Ok(vec![Instruction::GetPrecision])),
+    parse_test_0: ("0", Ok(vec![Instruction::Num(0.0)])),
+    parse_test_1: ("1", Ok(vec![Instruction::Num(1.0)])),
+    parse_test_dot: (".", Ok(vec![Instruction::Num(0.0)])),
+    parse_test_dotdot: ("..", Ok(vec![Instruction::Num(0.0), Instruction::Num(0.0)])),
+    parse_test_dot_dot: (". .", Ok(vec![Instruction::Num(0.0), Instruction::Num(0.0)])),
+    parse_test_dot0: (".0", Ok(vec![Instruction::Num(0.0)])),
+    parse_test_0dot: ("0.", Ok(vec![Instruction::Num(0.0)])),
+    parse_test_0dot0: ("0.0", Ok(vec![Instruction::Num(0.0)])),
+    parse_test_dot1: (".1", Ok(vec![Instruction::Num(0.1)])),
+    parse_test_1dot: ("1.", Ok(vec![Instruction::Num(1.0)])),
+    parse_test_1dot1: ("1.1", Ok(vec![Instruction::Num(1.1)])),
+    parse_test_dot1dot1: (".1.1", Ok(vec![Instruction::Num(0.1), Instruction::Num(0.1)])),
+    parse_test_all_digits: ("1234567890", Ok(vec![Instruction::Num(1234567890.0)])),
+    parse_test_00: ("00", Ok(vec![Instruction::Num(0.0)])),
+    parse_test_11: ("11", Ok(vec![Instruction::Num(11.0)])),
+    parse_test_0_0: ("0 0", Ok(vec![Instruction::Num(0.0), Instruction::Num(0.0)])),
+    parse_test_1_1: ("1 1", Ok(vec![Instruction::Num(1.0), Instruction::Num(1.0)])),
 }
 
 #[test]
