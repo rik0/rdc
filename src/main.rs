@@ -6,6 +6,11 @@ use std::error::Error;
 use std::f64;
 
 
+type Register = u8;
+
+
+
+
 #[derive(Copy, Clone, Debug,PartialEq)]
 enum Instruction<T> {
     Nop,
@@ -30,10 +35,10 @@ enum Instruction<T> {
     Dup,
     Swap,
     // registers
-    Store,
-    Load,
-    StoreStack,
-    LoadStack,
+    Store(Register),
+    Load(Register),
+    StoreStack(Register),
+    LoadStack(Register),
     // parameters
     SetInputRadix,
     SetOutputRadix,
@@ -44,12 +49,12 @@ enum Instruction<T> {
     // string
     MakeString,
     OpToString,
-    TosGeExecute,
-    TosGtExecute,
-    TosLeExecute,
-    TosLtExecute,
-    TosEqExecute,
-    TosNeExecute,
+    TosGeExecute(Register),
+    TosGtExecute(Register),
+    TosLeExecute(Register),
+    TosLtExecute(Register),
+    TosEqExecute(Register),
+    TosNeExecute(Register),
     ExecuteInput,
     ReturnCaller,
     ReturnN,
@@ -69,6 +74,7 @@ enum ParserErrorType {
     IllegalState(String),
     InvalidCharacter(u8),
     NumParseError(usize, usize, String),
+    EOP(String),
 }
 
 #[derive(Clone,Debug,PartialEq)]
@@ -76,6 +82,7 @@ enum ParserState {
     TopLevel,
     Error(usize, ParserErrorType),
     Num{start: usize, end: usize, seen_dot: bool},
+    Register(u8),
     End,
 }
 
@@ -136,13 +143,17 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError>
                     b'c' => instructions.push(Instruction::Clear),
                     b'd' => instructions.push(Instruction::Dup),
                     b'r' => instructions.push(Instruction::Swap),
+                    b's'|b'l'|b'S'|b'L'|b'>'|b'<'|b'=' => {
+                        // consumed char for operations, move to next position to get the register
+                        state = ParserState::Register(ch)
+                    }
                     b'i' => instructions.push(Instruction::SetInputRadix),
                     b'o' => instructions.push(Instruction::SetOutputRadix),
                     b'k' => instructions.push(Instruction::SetPrecision),
                     b'I' => instructions.push(Instruction::GetInputRadix),
                     b'O' => instructions.push(Instruction::GetOutputRadix),
                     b'K' => instructions.push(Instruction::GetPrecision),
-                    b' ' => {},
+                    b' '|b'\n' => (), // do nothing
                     ch => {
                         state = ParserState::Error(position, ParserErrorType::InvalidCharacter(ch));
                         continue;
@@ -195,6 +206,16 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError>
                         }
                     }
                 }
+            }
+            ParserState::Register(opbyte) => {
+                if position >= program_text.len() {
+                    state = ParserState::Error(position, ParserErrorType::EOP("was expecting a register".to_string()));
+                    break
+                }
+                let ch = program_text[position];
+
+
+                position += 1;
 
             }
         }
@@ -211,6 +232,22 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError>
         }
     }
 }
+
+fn register_operation<T>(opbyte: u8, register_byte: u8) -> Result<Instruction<T>, ParserErrorType> {
+    let r : Register = register_byte as Register;
+
+    return match opbyte {
+        b's' => Ok(Instruction::Store(r)),
+        b'l' => Ok(Instruction::Load(r)),
+        b'S' => Ok(Instruction::StoreStack(r)),
+        b'L' => Ok(Instruction::LoadStack(r)),
+        b'<' => Ok(Instruction::TosLtExecute(r)),
+        b'>' => Ok(Instruction::TosGtExecute(r)),
+        b'=' => Ok(Instruction::TosEqExecute(r)),
+        ch => Err(ParserErrorType::IllegalState("there is an issue in register_operation or in the RegisterParse".to_string()))
+    }
+}
+
 
 fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String> 
     where T: FromStr + Default,
