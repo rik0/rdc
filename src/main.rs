@@ -4,6 +4,10 @@ use std::str::FromStr;
 use std::error;
 use std::error::Error;
 use std::f64;
+use std::path::Path;
+use std::fs;
+use std::fs::File;
+use std::io::prelude::*;
 
 
 type Register = u8;
@@ -11,10 +15,13 @@ type Register = u8;
 
 
 
+// todo remove T (we must always keep the chars... what about using references to the main program for all types?)
+
 #[derive(Copy, Clone, Debug,PartialEq)]
-enum Instruction<T> {
+enum Instruction<'a> {
     Nop,
-    Num(T),
+    Num(&'a[u8]),
+    Str(&'a[u8]),
     // print
     PrintLN,
     PrintPop,
@@ -92,9 +99,7 @@ struct ParserError {
     error_type: ParserErrorType,
 }
 
-fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError> 
-    where T: FromStr + Default,
-          <T as str::FromStr>::Err: error::Error
+fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> 
 {
     let mut state = ParserState::TopLevel;
     let mut instructions = Vec::new();
@@ -164,19 +169,10 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError>
             }
             ParserState::Num{start, end, seen_dot} => {
                 if position >= program_text.len() {
-                    let chars = &program_text[start..end];
-
-                    match ascii_to_num::<T>(chars) {
-                        Ok(n) => {
-                            instructions.push(Instruction::Num(n));
-                            state = ParserState::End;
-                        }
-                        Err(reason) => {
-                            state = ParserState::Error(position, ParserErrorType::NumParseError(start, end, reason));
-                        }
-                    }
-                    break
-
+                    debug_assert!(start<end);
+                    instructions.push(Instruction::Num(&program_text[start..end]));
+                    state = ParserState::End;
+                    break;
                 }
                 let ch = program_text[position];
                 match (seen_dot, ch) {
@@ -186,24 +182,15 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError>
                         position += 1;
                     }
                     (_, b'0' ... b'9') => {
-                        state = ParserState::Num{start, end: end+1, seen_dot: true};
+                        state = ParserState::Num{start, end: end+1, seen_dot: seen_dot};
                         position += 1;
                     }
                     (true, b'.')|_ => {
                         // it means it initiates a new number, store the old and start again
                         // we must not advance the position: note that this means we are looping
                         // a bit more than necessary, but it makes the logic simpler
-                        let chars = &program_text[start..end];
-
-                        match ascii_to_num::<T>(chars) {
-                            Ok(n) => {
-                                instructions.push(Instruction::Num(n));
-                                state = ParserState::TopLevel;
-                            }
-                            Err(reason) => {
-                                state = ParserState::Error(position, ParserErrorType::NumParseError(start, end, reason))
-                            }
-                        }
+                        instructions.push(Instruction::Num(&program_text[start..end]));
+                        state = ParserState::TopLevel;
                     }
                 }
             }
@@ -233,7 +220,7 @@ fn parse<T>(program_text: &[u8]) -> Result<Vec<Instruction<T>>, ParserError>
     }
 }
 
-fn register_operation<T>(opbyte: u8, register_byte: u8) -> Result<Instruction<T>, ParserErrorType> {
+fn register_operation<'a>(opbyte: u8, register_byte: u8) -> Result<Instruction<'a>, ParserErrorType> {
     let r : Register = register_byte as Register;
 
     return match opbyte {
@@ -249,21 +236,21 @@ fn register_operation<T>(opbyte: u8, register_byte: u8) -> Result<Instruction<T>
 }
 
 
-fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String> 
-    where T: FromStr + Default,
-          <T as str::FromStr>::Err: error::Error
-{
-    return match str::from_utf8(bytes) {
-        Ok(".") => Ok(T::default()),
-        Ok(chars) => {
-            match T::from_str(chars) {
-                Ok(n) => Ok(n),
-                Err(error) => Err(error.description().to_string()),
-            }
-        }
-        Err(utf8error) => Err(utf8error.description().to_string())
-    }
-}
+// fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String> 
+//     where T: FromStr + Default,
+//           <T as str::FromStr>::Err: error::Error
+// {
+//     return match str::from_utf8(bytes) {
+//         Ok(".") => Ok(T::default()),
+//         Ok(chars) => {
+//             match T::from_str(chars) {
+//                 Ok(n) => Ok(n),
+//                 Err(error) => Err(error.description().to_string()),
+//             }
+//         }
+//         Err(utf8error) => Err(utf8error.description().to_string())
+//     }
+// }
 
 macro_rules! parse_tests {
     ($($name:ident: $value:expr,)*) => {
@@ -271,7 +258,7 @@ macro_rules! parse_tests {
         #[test]
         fn $name() {
             let (input, expected) = $value;
-            assert_eq!(expected, parse::<f64>(input.as_bytes()));
+            assert_eq!(expected, parse(input.as_bytes()));
         }
     )*
     }
@@ -303,41 +290,186 @@ parse_tests! {
     parse_test_i2: ("I", Ok(vec![Instruction::GetInputRadix])),
     parse_test_o2: ("O", Ok(vec![Instruction::GetOutputRadix])),
     parse_test_k2: ("K", Ok(vec![Instruction::GetPrecision])),
-    parse_test_0: ("0", Ok(vec![Instruction::Num(0.0)])),
-    parse_test_1: ("1", Ok(vec![Instruction::Num(1.0)])),
-    parse_test_dot: (".", Ok(vec![Instruction::Num(0.0)])),
-    parse_test_dotdot: ("..", Ok(vec![Instruction::Num(0.0), Instruction::Num(0.0)])),
-    parse_test_dot_dot: (". .", Ok(vec![Instruction::Num(0.0), Instruction::Num(0.0)])),
-    parse_test_dot0: (".0", Ok(vec![Instruction::Num(0.0)])),
-    parse_test_0dot: ("0.", Ok(vec![Instruction::Num(0.0)])),
-    parse_test_0dot0: ("0.0", Ok(vec![Instruction::Num(0.0)])),
-    parse_test_dot1: (".1", Ok(vec![Instruction::Num(0.1)])),
-    parse_test_1dot: ("1.", Ok(vec![Instruction::Num(1.0)])),
-    parse_test_1dot1: ("1.1", Ok(vec![Instruction::Num(1.1)])),
-    parse_test_dot1dot1: (".1.1", Ok(vec![Instruction::Num(0.1), Instruction::Num(0.1)])),
-    parse_test_all_digits: ("1234567890", Ok(vec![Instruction::Num(1234567890.0)])),
-    parse_test_00: ("00", Ok(vec![Instruction::Num(0.0)])),
-    parse_test_11: ("11", Ok(vec![Instruction::Num(11.0)])),
-    parse_test_0_0: ("0 0", Ok(vec![Instruction::Num(0.0), Instruction::Num(0.0)])),
-    parse_test_1_1: ("1 1", Ok(vec![Instruction::Num(1.0), Instruction::Num(1.0)])),
+    parse_test_0: ("0", Ok(vec![Instruction::Num("0".as_bytes())])),
+    parse_test_0dot: ("0.", Ok(vec![Instruction::Num("0.".as_bytes())])),
+    parse_test_dot0: (".0", Ok(vec![Instruction::Num(".0".as_bytes())])),
+    parse_test_132763: ("132763", Ok(vec![Instruction::Num("132763".as_bytes())])),
+    parse_test_1: ("1", Ok(vec![Instruction::Num("1".as_bytes())])),
+    parse_test_1dot: ("1.", Ok(vec![Instruction::Num("1.".as_bytes())])),
+    parse_test_dot1: (".1", Ok(vec![Instruction::Num(".1".as_bytes())])),
+    parse_test_dot: (".", Ok(vec![Instruction::Num(".".as_bytes())])),
+    parse_test_dotdot: ("..", Ok(vec![Instruction::Num(".".as_bytes()), Instruction::Num(".".as_bytes())])),
+    parse_test_dot_dot: (". .", Ok(vec![Instruction::Num(".".as_bytes()), Instruction::Num(".".as_bytes())])),
+    parse_test_zero_dot_zero: ("0.0", Ok(vec![Instruction::Num("0.0".as_bytes())])),
+    parse_test_00: ("00", Ok(vec![Instruction::Num("00".as_bytes())])),
+    parse_test_11: ("11", Ok(vec![Instruction::Num("11".as_bytes())])),
+    parse_test_0_0: ("0 0", Ok(vec![Instruction::Num("0".as_bytes()), Instruction::Num("0".as_bytes())])),
+    parse_test_1_1: ("1 1", Ok(vec![Instruction::Num("1".as_bytes()), Instruction::Num("1".as_bytes())])),
 }
 
 #[test]
 fn testparse() {
     let (input, expected) = ("", Ok(vec![]));
-    assert_eq!(expected, parse::<f64>(input.as_bytes()));
+    assert_eq!(expected, parse(input.as_bytes()));
+}
+
+
+#[derive(Debug,Clone)]
+struct VMError {
+    message: String,
+}
+
+struct VM {
+    input_radix: u8,// [2,16]
+    output_radix: u8, // >= 2
+    precision: u64, // > 0, always in decimal
+}
+
+
+impl VM {
+    fn new() -> VM {
+        VM{input_radix: 10, output_radix: 10, precision: 0}
+    }
+
+    fn eval(&mut self, instructions: &[Instruction])    {
+
+    }
+
+    fn set_input_radix(&mut self, radix: u8) -> Result<(), VMError> {
+        if radix != 10 {
+            return Err(VMError{message: "invalid radix".to_string()});
+        }
+        self.input_radix = radix;
+        return Ok(());
+    }
+
+    fn set_output_radix(&mut self, radix: u8) -> Result<(), VMError> {
+        if radix != 10 {
+            return Err(VMError{message: "invalid radix".to_string()});
+        }
+        self.output_radix = radix;
+        return Ok(());
+    }
+
+    fn set_precision(&mut self, precision: u64) -> Result<(), VMError> {
+        self.precision = precision;
+        return Ok(());
+    }
+
+}
+
+#[test]
+fn test_input_radix() {
+    let mut vm = VM::new();
+    assert!(vm.set_input_radix(10).is_ok());
+}
+
+#[test]
+fn test_input_radix_fail() {
+    let mut vm = VM::new();
+    assert!(vm.set_input_radix(50).is_err()); 
+}
+
+#[test]
+fn test_output_radix() {
+    let mut vm = VM::new();
+    assert!(vm.set_output_radix(10).is_ok());
+}
+
+#[test]
+fn test_output_radix_fail() {
+    let mut vm = VM::new();
+    assert!(vm.set_output_radix(50).is_err()); 
+}
+
+#[test]
+fn test_precision() {
+    let mut vm = VM::new();
+    assert!(vm.set_precision(10).is_ok());
+}
+
+enum ProgramSource {
+    Text(String),
+    File(String),
+}
+
+impl ProgramSource {
+    fn into_bytes<'a>(self, buffer: &mut Vec<u8>) -> Result<usize, std::io::Error> {
+        match self {
+            ProgramSource::Text(mut text_str) => {
+                return Ok(buffer.write(text_str.as_bytes())?);
+            }
+            ProgramSource::File(filename) => {
+                let path = Path::new(&filename);
+                let mut file = File::open(path)?;
+                return Ok(file.read_to_end(buffer)?);
+            }
+        }
+    }
+
 }
 
 
 fn main() {
-    match parse::<f64>(&("".as_bytes())) {
-        Ok(instructions) => { println!("{:?}", instructions) },
-        Err(ParserError{position, error_type}) => {
-            writeln!(std::io::stderr(), "{:?} at col {}", error_type, position).unwrap();
-            //std::process:exit(1);
+    // let us implement the real app to understand approaches to ownership
+
+    let mut vm = VM::new();
+
+    let mut args = std::env::args().skip(1);
+
+    let mut program_sources = Vec::new();
+    let mut positional_program_sources = Vec::new();
+
+    while let Some(arg) = args.next() {
+        match arg.as_ref() {
+            "-e"|"--expression" => {
+                match args.next() {
+                    Some(text) => program_sources.push(ProgramSource::Text(text)),
+                    None => print_help(1),
+                }
+
+            }
+            "-f"|"--file" => {
+                match args.next() {
+                    Some(file) => program_sources.push(ProgramSource::File(file)),
+                    None => print_help(1),
+                }
+
+            }
+            "-h"|"--help" => print_help(0),
+            "-v"|"--version" => print_version(0),
+            file => {
+                positional_program_sources.push(ProgramSource::File(arg.to_string()));
+            }
         }
     }
-    println!("Hello, world!");
+
+    for program_source in program_sources {
+        let mut source_code = Vec::new();
+        match program_source.into_bytes(&mut source_code) {
+            Ok(bytes) => match parse(&source_code[..bytes]) {
+                Err(parse_error) => {
+                    // TODO I should use a description
+                    let _ = writeln!(std::io::stderr(), "{:?} at col {}", parse_error.error_type, parse_error.position).unwrap();
+                }
+                Ok(instructions) => {
+                    vm.eval(&instructions[..]);
+                }
+            }
+            Err(error) => {
+                eprintln!("error processing file {}", error);
+            }
+        }
+
+    }
+}
+
+fn print_help(code: i32) {
+    std::process::exit(code);
+}
+
+fn print_version(code: i32) {
+    std::process::exit(code);
 }
 
 // impl<'a, T> Parser<'a, T> {
