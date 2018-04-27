@@ -1,13 +1,8 @@
 use std::io::Write;
-use std::str;
-use std::str::FromStr;
-use std::error;
-use std::error::Error;
-use std::f64;
 use std::path::Path;
-use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
+use std::ops::Range;
 
 type Register = u8;
 //type ProgramText = &[u8];
@@ -31,7 +26,7 @@ enum RegisterOperationType {
 enum Instruction<'a> {
     Nop,
     Num(&'a [u8]),
-    Str(&'a [u8]),
+    //Str(&'a [u8]),
     // print
     PrintLN,
     PrintPop,
@@ -61,27 +56,25 @@ enum Instruction<'a> {
     GetOutputRadix,
     GetPrecision,
     // string
-    MakeString,
-    OpToString,
-    ExecuteInput,
-    ReturnCaller,
-    ReturnN,
+    //MakeString,
+    //OpToString,
+    //ExecuteInput,
+    //ReturnCaller,
+    //ReturnN,
     // status enquiry
-    Digits,
-    FractionDigits,
-    StackDepth,
+    // Digits,
+    // FractionDigits,
+    // StackDepth,
     // miscellaneous
     System(&'a [u8]),
-    Comment,
-    SetArray,
-    GetArray,
+    //Comment,
+    //SetArray,
+    //GetArray,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 enum ParserErrorType {
-    IllegalState(String),
     InvalidCharacter(u8),
-    NumParseError(usize, usize, String),
     EOP(String),
 }
 
@@ -94,13 +87,13 @@ enum ParserState {
         end: usize,
         seen_dot: bool,
     },
+    ReadUntilByte{terminator: u8, range: Range<usize>},
     Command {
         start: usize,
         end: usize,
     },
     Register(RegisterOperationType),
     Mark,
-    End,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -109,191 +102,173 @@ struct ParserError {
     error_type: ParserErrorType,
 }
 
+macro_rules! incrementing {
+    ($identifier:ident; $case:block) => ({
+        let result : ParserState = $case;
+        $identifier += 1;
+        result
+    });
+    ($identifier:ident, $amount:expr; $case:block) => ({
+        let result : ParserState = $case;
+        $identifier += expr;
+        result
+    });
+    ($identifier:ident; $next_state:expr) => ({
+        let result : ParserState = $next_state;
+        $identifier += 1;
+        result
+    });
+    ($identifier:ident, $amount:expr; $case:expr) => ({
+        let result : ParserState = $expr;
+        $identifier += expr;
+        result
+    });
+}
+
+macro_rules! push_and_next_state {
+    ($instructions:ident; $instruction:expr; $next_state:expr ) => ({
+        $instructions.push($instruction);
+        $next_state
+    });
+}
+
+macro_rules! push_and_toplevel {
+    ($instructions:ident; $instruction:expr) => (
+        push_and_next_state![$instructions; $instruction; ParserState::TopLevel]
+    ); 
+}
+
+
+// macro_rules! push_instruction {
+//     (vec:expression; instruction:expression; next_state:expression) => ({
+//         vec.push(instruction);
+//         next_state
+//     })
+// }
+
 fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
     let mut state = ParserState::TopLevel;
     let mut instructions = Vec::new();
     let mut position: usize = 0;
 
-    if program_text.len() == 0 {
-        return Ok(instructions);
-    }
     loop {
-        match state {
-            ParserState::End => break,
-            ParserState::Error(_, _) => break,
-            ParserState::TopLevel => {
-                if position >= program_text.len() {
-                    break;
+        if position >= program_text.len() {
+            return match state {
+                ParserState::Error(position, error_type) => Err(ParserError {
+                    position,
+                    error_type,
+                }),
+                ParserState::TopLevel => Ok(instructions),
+                ParserState::Num { start, end, seen_dot: _} => {
+                    instructions.push(Instruction::Num(&program_text[start..end]));
+                    Ok(instructions)
                 }
-                let ch = program_text[position];
-
-                match ch {
-                    0 => instructions.push(Instruction::Nop),
-                    b'.' => {
-                        // here we effectively consume one character, so we must go through the increment
-                        state = ParserState::Num {
+                ParserState::Register(_) => Err(ParserError{
+                        position,
+                        error_type: ParserErrorType::EOP("was expecting a register".to_string()),
+                    }),
+                ParserState::Mark => Ok(instructions),
+                ParserState::Command { start, end } => {
+                    instructions.push(Instruction::System(&program_text[start..end]));
+                    Ok(instructions)
+                }
+                ParserState::ReadUntilByte{terminator: _terminator , range } => {
+                    instructions.push(Instruction::System(&program_text[range]));
+                    Ok(instructions)
+                }
+            }
+        }
+        state = match state {
+            ParserState::Error(position, error_type) => return Err(ParserError{position, error_type}),
+            ParserState::TopLevel => incrementing![position; {
+                // TODO flatten these tables
+                match program_text[position] {
+                    0 => push_and_toplevel![instructions; Instruction::Nop],
+                    b'.' =>  ParserState::Num {
                             start: position,
                             end: position + 1,
                             seen_dot: true,
-                        };
-                    }
-                    b'0'...b'9' => {
-                        // here we effectively consume one character, so we must go through the increment
-                        state = ParserState::Num {
+                    },
+                    b'0'...b'9' => ParserState::Num {
                             start: position,
                             end: position + 1,
                             seen_dot: false,
-                        };
-                    }
-                    b'p' => instructions.push(Instruction::PrintLN),
-                    b'n' => instructions.push(Instruction::PrintPop),
-                    b'P' => instructions.push(Instruction::PrettyPrint),
-                    b'f' => instructions.push(Instruction::PrintStack),
-                    b'+' => instructions.push(Instruction::Add),
-                    b'-' => instructions.push(Instruction::Sub),
-                    b'*' => instructions.push(Instruction::Mul),
-                    b'/' => instructions.push(Instruction::Div),
-                    b'%' => instructions.push(Instruction::Mod),
-                    b'~' => instructions.push(Instruction::Divmod),
-                    b'^' => instructions.push(Instruction::Exp),
-                    b'|' => instructions.push(Instruction::Modexp),
-                    b'v' => instructions.push(Instruction::Sqrt),
-                    b'c' => instructions.push(Instruction::Clear),
-                    b'd' => instructions.push(Instruction::Dup),
-                    b'r' => instructions.push(Instruction::Swap),
-                    b's' => state = ParserState::Register(RegisterOperationType::Store),
-                    b'l' => state = ParserState::Register(RegisterOperationType::Load),
-                    b'S' => state = ParserState::Register(RegisterOperationType::StoreStack),
-                    b'L' => state = ParserState::Register(RegisterOperationType::LoadStack),
-                    b'>' => state = ParserState::Register(RegisterOperationType::TosGtExecute),
-                    b'<' => state = ParserState::Register(RegisterOperationType::TosLtExecute),
-                    b'=' => state = ParserState::Register(RegisterOperationType::TosEqExecute),
-                    b'!' => state = ParserState::Mark,
-                    b'i' => instructions.push(Instruction::SetInputRadix),
-                    b'o' => instructions.push(Instruction::SetOutputRadix),
-                    b'k' => instructions.push(Instruction::SetPrecision),
-                    b'I' => instructions.push(Instruction::GetInputRadix),
-                    b'O' => instructions.push(Instruction::GetOutputRadix),
-                    b'K' => instructions.push(Instruction::GetPrecision),
-                    b' ' | b'\n' => (), // do nothing
-                    ch => {
-                        state = ParserState::Error(position, ParserErrorType::InvalidCharacter(ch));
-                        continue;
-                    }
+                    },
+                    b'p' => push_and_toplevel![instructions; Instruction::PrintLN],
+                    b'n' => push_and_toplevel![instructions; Instruction::PrintPop],
+                    b'P' => push_and_toplevel![instructions; Instruction::PrettyPrint],
+                    b'f' => push_and_toplevel![instructions; Instruction::PrintStack],
+                    b'+' => push_and_toplevel![instructions; Instruction::Add],
+                    b'-' => push_and_toplevel![instructions; Instruction::Sub],
+                    b'*' => push_and_toplevel![instructions; Instruction::Mul],
+                    b'/' => push_and_toplevel![instructions; Instruction::Div],
+                    b'%' => push_and_toplevel![instructions; Instruction::Mod],
+                    b'~' => push_and_toplevel![instructions; Instruction::Divmod],
+                    b'^' => push_and_toplevel![instructions; Instruction::Exp],
+                    b'|' => push_and_toplevel![instructions; Instruction::Modexp],
+                    b'v' => push_and_toplevel![instructions; Instruction::Sqrt],
+                    b'c' => push_and_toplevel![instructions; Instruction::Clear],
+                    b'd' => push_and_toplevel![instructions; Instruction::Dup],
+                    b'r' => push_and_toplevel![instructions; Instruction::Swap],
+                    b's' => ParserState::Register(RegisterOperationType::Store),
+                    b'l' => ParserState::Register(RegisterOperationType::Load),
+                    b'S' => ParserState::Register(RegisterOperationType::StoreStack),
+                    b'L' => ParserState::Register(RegisterOperationType::LoadStack),
+                    b'>' => ParserState::Register(RegisterOperationType::TosGtExecute),
+                    b'<' => ParserState::Register(RegisterOperationType::TosLtExecute),
+                    b'=' => ParserState::Register(RegisterOperationType::TosEqExecute),
+                    b'!' => ParserState::Mark,
+                    b'i' => push_and_toplevel![instructions; Instruction::SetInputRadix],
+                    b'o' => push_and_toplevel![instructions; Instruction::SetOutputRadix],
+                    b'k' => push_and_toplevel![instructions; Instruction::SetPrecision],
+                    b'I' => push_and_toplevel![instructions; Instruction::GetInputRadix],
+                    b'O' => push_and_toplevel![instructions; Instruction::GetOutputRadix],
+                    b'K' => push_and_toplevel![instructions; Instruction::GetPrecision],
+                    b' ' | b'\n' => ParserState::TopLevel, // do nothing
+                    ch => ParserState::Error(position, ParserErrorType::InvalidCharacter(ch)),
                 }
-
-                position += 1;
-            }
+            }],
             ParserState::Num {
                 start,
                 end,
                 seen_dot,
             } => {
-                if position >= program_text.len() {
-                    instructions.push(Instruction::Num(&program_text[start..end]));
-                    state = ParserState::End;
-                    break;
-                }
-                let ch = program_text[position];
-                match (seen_dot, ch) {
-                    (false, b'.') => {
-                        // if we are here, we were alredy building a number and finally we got the .
-                        state = ParserState::Num {
-                            start,
-                            end: end + 1,
-                            seen_dot: true,
-                        };
-                        position += 1;
-                    }
-                    (_, b'0'...b'9') => {
-                        state = ParserState::Num {
-                            start,
-                            end: end + 1,
-                            seen_dot: seen_dot,
-                        };
-                        position += 1;
-                    }
-                    (true, b'.') | _ => {
-                        // it means it initiates a new number, store the old and start again
-                        // we must not advance the position: note that this means we are looping
-                        // a bit more than necessary, but it makes the logic simpler
-                        instructions.push(Instruction::Num(&program_text[start..end]));
-                        state = ParserState::TopLevel;
-                    }
+                match (seen_dot, program_text[position]) {
+                    (false, b'.') => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: true }],
+                    (_, b'0'...b'9') => incrementing![position; ParserState::Num { start, end: end + 1, seen_dot: seen_dot, }],
+                    // it means it initiates a new number, store the old and start again
+                    // we must not advance the position: note that this means we are looping
+                    // a bit more than necessary, but it makes the logic simpler
+                    (true, b'.') | _ => push_and_toplevel![instructions; Instruction::Num(&program_text[start..end])],
                 }
             }
-            ParserState::Register(register_operation_type) => {
-                if position >= program_text.len() {
-                    state = ParserState::Error(
-                        position,
-                        ParserErrorType::EOP("was expecting a register".to_string()),
-                    );
-                    break;
+            ParserState::Register(register_operation_type) => incrementing![
+                position; 
+                push_and_toplevel![
+                    instructions; 
+                    Instruction::RegisterOperation(register_operation_type, program_text[position])]],
+            ParserState::Mark => incrementing![position; {
+                match program_text[position] {
+                    b'>' => ParserState::Register(RegisterOperationType::TosGeExecute),
+                    b'<' => ParserState::Register(RegisterOperationType::TosLeExecute),
+                    b'=' => ParserState::Register(RegisterOperationType::TosNeExecute),
+                    _ => ParserState::Command { start: position, end: position+1, },
                 }
-                let ch = program_text[position];
-                instructions.push(Instruction::RegisterOperation(register_operation_type, ch));
-                state = ParserState::TopLevel;
-                position += 1;
-            }
-            ParserState::Mark => {
-                if position >= program_text.len() {
-                    break;
-                }
-                let ch = program_text[position];
-
-                match ch {
-                    b'>' => {
-                        state = ParserState::Register(RegisterOperationType::TosGeExecute);
-                    }
-                    b'<' => {
-                        state = ParserState::Register(RegisterOperationType::TosLeExecute);
-                    }
-                    b'=' => {
-                        state = ParserState::Register(RegisterOperationType::TosNeExecute);
-                    }
-                    _ => {
-                        state = ParserState::Command {
-                            start: position,
-                            end: position + 1,
-                        };
-                    }
-                }
-                position += 1;
-            }
+            }],
             ParserState::Command { start, end } => {
-                if position >= program_text.len() {
-                    instructions.push(Instruction::System(&program_text[start..end]));
-                    state = ParserState::End;
-                    break;
+                match program_text[position] {
+                    b'\n' => push_and_toplevel![instructions; Instruction::System(&program_text[start..end])],
+                    _ => ParserState::Command { start, end: end+1 }
                 }
-                let ch = program_text[position];
-                if ch == b'\n' {
-                    instructions.push(Instruction::System(&program_text[start..end]));
-                    state = ParserState::TopLevel;
-                } else {
-                    state = ParserState::Command {
-                        start,
-                        end: end+1,
-                    }
-                }
-                position += 1; // let us skip the newline or mark the char as visited
             }
+            ParserState::ReadUntilByte{terminator, range: Range{start, end}} => incrementing![position; {
+                match program_text[position] {
+                    ch if ch == terminator => push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])],
+                    _ => ParserState::ReadUntilByte{terminator, range: start .. end+1},
+                }
+            }],
         }
     }
-
-    return match state {
-        ParserState::Error(position, error_type) => Err(ParserError {
-            position,
-            error_type,
-        }),
-        ParserState::End => Ok(instructions),
-        //ParserState::TopLevel => Err(ParserError{position: position, error_type: ParserErrorType::IllegalState("parsing stopped".to_string())}),
-        ParserState::TopLevel => Ok(instructions),
-        _other => Err(ParserError {
-            position: position,
-            error_type: ParserErrorType::IllegalState("not sure".to_string()),
-        }),
-    };
 }
 
 // fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String>
