@@ -171,95 +171,68 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 }
             }
         }
-        state = match state {
-            ParserState::Error(position, error_type) => return Err(ParserError{position, error_type}),
-            ParserState::TopLevel => incrementing![position; {
-                // TODO flatten these tables
-                match program_text[position] {
-                    0 => push_and_toplevel![instructions; Instruction::Nop],
-                    b'.' =>  ParserState::Num {
-                            start: position,
-                            end: position + 1,
-                            seen_dot: true,
-                    },
-                    b'0'...b'9' => ParserState::Num {
-                            start: position,
-                            end: position + 1,
-                            seen_dot: false,
-                    },
-                    b'p' => push_and_toplevel![instructions; Instruction::PrintLN],
-                    b'n' => push_and_toplevel![instructions; Instruction::PrintPop],
-                    b'P' => push_and_toplevel![instructions; Instruction::PrettyPrint],
-                    b'f' => push_and_toplevel![instructions; Instruction::PrintStack],
-                    b'+' => push_and_toplevel![instructions; Instruction::Add],
-                    b'-' => push_and_toplevel![instructions; Instruction::Sub],
-                    b'*' => push_and_toplevel![instructions; Instruction::Mul],
-                    b'/' => push_and_toplevel![instructions; Instruction::Div],
-                    b'%' => push_and_toplevel![instructions; Instruction::Mod],
-                    b'~' => push_and_toplevel![instructions; Instruction::Divmod],
-                    b'^' => push_and_toplevel![instructions; Instruction::Exp],
-                    b'|' => push_and_toplevel![instructions; Instruction::Modexp],
-                    b'v' => push_and_toplevel![instructions; Instruction::Sqrt],
-                    b'c' => push_and_toplevel![instructions; Instruction::Clear],
-                    b'd' => push_and_toplevel![instructions; Instruction::Dup],
-                    b'r' => push_and_toplevel![instructions; Instruction::Swap],
-                    b's' => ParserState::Register(RegisterOperationType::Store),
-                    b'l' => ParserState::Register(RegisterOperationType::Load),
-                    b'S' => ParserState::Register(RegisterOperationType::StoreStack),
-                    b'L' => ParserState::Register(RegisterOperationType::LoadStack),
-                    b'>' => ParserState::Register(RegisterOperationType::TosGtExecute),
-                    b'<' => ParserState::Register(RegisterOperationType::TosLtExecute),
-                    b'=' => ParserState::Register(RegisterOperationType::TosEqExecute),
-                    b'!' => ParserState::Mark,
-                    b'i' => push_and_toplevel![instructions; Instruction::SetInputRadix],
-                    b'o' => push_and_toplevel![instructions; Instruction::SetOutputRadix],
-                    b'k' => push_and_toplevel![instructions; Instruction::SetPrecision],
-                    b'I' => push_and_toplevel![instructions; Instruction::GetInputRadix],
-                    b'O' => push_and_toplevel![instructions; Instruction::GetOutputRadix],
-                    b'K' => push_and_toplevel![instructions; Instruction::GetPrecision],
-                    b' ' | b'\n' => ParserState::TopLevel, // do nothing
-                    ch => ParserState::Error(position, ParserErrorType::InvalidCharacter(ch)),
-                }
+        state = match (state, program_text[position]) {
+            (ParserState::Error(position, error_type), _) => return Err(ParserError{position, error_type}),
+            (ParserState::TopLevel, 0) => incrementing![position; push_and_toplevel![instructions; Instruction::Nop]],
+            (ParserState::TopLevel, b'.') =>  incrementing![position; ParserState::Num {
+                    start: position,
+                    end: position + 1,
+                    seen_dot: true,
             }],
-            ParserState::Num {
-                start,
-                end,
-                seen_dot,
-            } => {
-                match (seen_dot, program_text[position]) {
-                    (false, b'.') => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: true }],
-                    (_, b'0'...b'9') => incrementing![position; ParserState::Num { start, end: end + 1, seen_dot: seen_dot, }],
-                    // it means it initiates a new number, store the old and start again
-                    // we must not advance the position: note that this means we are looping
-                    // a bit more than necessary, but it makes the logic simpler
-                    (true, b'.') | _ => push_and_toplevel![instructions; Instruction::Num(&program_text[start..end])],
-                }
-            }
-            ParserState::Register(register_operation_type) => incrementing![
+            (ParserState::TopLevel, b'0'...b'9') => incrementing![position; ParserState::Num {
+                    start: position,
+                    end: position + 1,
+                    seen_dot: false,
+            }],
+            (ParserState::TopLevel, b'p') => incrementing![position; push_and_toplevel![instructions; Instruction::PrintLN]],
+            (ParserState::TopLevel, b'n') => incrementing![position; push_and_toplevel![instructions; Instruction::PrintPop]],
+            (ParserState::TopLevel, b'P') => incrementing![position; push_and_toplevel![instructions; Instruction::PrettyPrint]],
+            (ParserState::TopLevel, b'f') => incrementing![position; push_and_toplevel![instructions; Instruction::PrintStack]],
+            (ParserState::TopLevel, b'+') => incrementing![position; push_and_toplevel![instructions; Instruction::Add]],
+            (ParserState::TopLevel, b'-') => incrementing![position; push_and_toplevel![instructions; Instruction::Sub]],
+            (ParserState::TopLevel, b'*') => incrementing![position; push_and_toplevel![instructions; Instruction::Mul]],
+            (ParserState::TopLevel, b'/') => incrementing![position; push_and_toplevel![instructions; Instruction::Div]],
+            (ParserState::TopLevel, b'%') => incrementing![position; push_and_toplevel![instructions; Instruction::Mod]],
+            (ParserState::TopLevel, b'~') => incrementing![position; push_and_toplevel![instructions; Instruction::Divmod]],
+            (ParserState::TopLevel, b'^') => incrementing![position; push_and_toplevel![instructions; Instruction::Exp]],
+            (ParserState::TopLevel, b'|') => incrementing![position; push_and_toplevel![instructions; Instruction::Modexp]],
+            (ParserState::TopLevel, b'v') => incrementing![position; push_and_toplevel![instructions; Instruction::Sqrt]],
+            (ParserState::TopLevel, b'c') => incrementing![position; push_and_toplevel![instructions; Instruction::Clear]],
+            (ParserState::TopLevel, b'd') => incrementing![position;push_and_toplevel![instructions; Instruction::Dup]],
+            (ParserState::TopLevel, b'r') => incrementing![position;push_and_toplevel![instructions; Instruction::Swap]],
+            (ParserState::TopLevel, b's') => incrementing![position;ParserState::Register(RegisterOperationType::Store)],
+            (ParserState::TopLevel, b'l') => incrementing![position;ParserState::Register(RegisterOperationType::Load)],
+            (ParserState::TopLevel, b'S') => incrementing![position;ParserState::Register(RegisterOperationType::StoreStack)],
+            (ParserState::TopLevel, b'L') => incrementing![position;ParserState::Register(RegisterOperationType::LoadStack)],
+            (ParserState::TopLevel, b'>') => incrementing![position;ParserState::Register(RegisterOperationType::TosGtExecute)],
+            (ParserState::TopLevel, b'<') => incrementing![position;ParserState::Register(RegisterOperationType::TosLtExecute)],
+            (ParserState::TopLevel, b'=') => incrementing![position;ParserState::Register(RegisterOperationType::TosEqExecute)],
+            (ParserState::TopLevel, b'!') => incrementing![position;ParserState::Mark],
+            (ParserState::TopLevel, b'i') => incrementing![position;push_and_toplevel![instructions; Instruction::SetInputRadix]],
+            (ParserState::TopLevel, b'o') => incrementing![position;push_and_toplevel![instructions; Instruction::SetOutputRadix]],
+            (ParserState::TopLevel, b'k') => incrementing![position;push_and_toplevel![instructions; Instruction::SetPrecision]],
+            (ParserState::TopLevel, b'I') => incrementing![position;push_and_toplevel![instructions; Instruction::GetInputRadix]],
+            (ParserState::TopLevel, b'O') => incrementing![position;push_and_toplevel![instructions; Instruction::GetOutputRadix]],
+            (ParserState::TopLevel, b'K') => incrementing![position;push_and_toplevel![instructions; Instruction::GetPrecision]],
+            (ParserState::TopLevel, b' ') => incrementing![position; ParserState::TopLevel], // do nothing
+            (ParserState::TopLevel, b'\n') => incrementing![position; ParserState::TopLevel], // do nothing
+            (ParserState::TopLevel, ch) => ParserState::Error(position, ParserErrorType::InvalidCharacter(ch)),
+            (ParserState::Num{start, end, seen_dot: false}, b'.')  => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: true }], 
+            (ParserState::Num{start, end, seen_dot}, b'0'...b'9') => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: seen_dot }], 
+            (ParserState::Num{start, end, seen_dot: _seen_dot}, _) => push_and_toplevel![instructions; Instruction::Num(&program_text[start..end])],
+            (ParserState::Register(register_operation_type), ch) => incrementing![
                 position; 
-                push_and_toplevel![
-                    instructions; 
-                    Instruction::RegisterOperation(register_operation_type, program_text[position])]],
-            ParserState::Mark => incrementing![position; {
-                match program_text[position] {
-                    b'>' => ParserState::Register(RegisterOperationType::TosGeExecute),
-                    b'<' => ParserState::Register(RegisterOperationType::TosLeExecute),
-                    b'=' => ParserState::Register(RegisterOperationType::TosNeExecute),
-                    _ => ParserState::Command { start: position, end: position+1, },
-                }
-            }],
-            ParserState::Command { start, end } => {
-                match program_text[position] {
-                    b'\n' => push_and_toplevel![instructions; Instruction::System(&program_text[start..end])],
-                    _ => ParserState::Command { start, end: end+1 }
-                }
-            }
-            ParserState::ReadUntilByte{terminator, range: Range{start, end}} => incrementing![position; {
-                match program_text[position] {
-                    ch if ch == terminator => push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])],
-                    _ => ParserState::ReadUntilByte{terminator, range: start .. end+1},
-                }
-            }],
+                push_and_toplevel![ instructions; Instruction::RegisterOperation(register_operation_type, ch)]],
+            (ParserState::Mark, b'>') => incrementing![position; ParserState::Register(RegisterOperationType::TosGeExecute)],
+            (ParserState::Mark, b'<') => incrementing![position; ParserState::Register(RegisterOperationType::TosLeExecute)],
+            (ParserState::Mark, b'=') => incrementing![position; ParserState::Register(RegisterOperationType::TosNeExecute)],
+            (ParserState::Mark, _) => incrementing![position; ParserState::Command { start: position, end: position+1, }],
+            (ParserState::Command { start, end }, b'\n') => incrementing![position; push_and_toplevel![instructions; Instruction::System(&program_text[start..end])]],
+            (ParserState::Command { start, end }, _) => incrementing![position; ParserState::Command { start, end: end+1 }],
+            (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, ch) if ch == terminator => incrementing![
+                position;
+                push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])]], 
+            (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, _) => incrementing![position; ParserState::ReadUntilByte{terminator, range: start .. end+1}],
         }
     }
 }
