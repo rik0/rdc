@@ -139,13 +139,6 @@ macro_rules! push_and_toplevel {
 }
 
 
-// macro_rules! push_instruction {
-//     (vec:expression; instruction:expression; next_state:expression) => ({
-//         vec.push(instruction);
-//         next_state
-//     })
-// }
-
 fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
     let mut state = ParserState::TopLevel;
     let mut instructions = Vec::new();
