@@ -9,19 +9,29 @@ use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 
-
 type Register = u8;
-
-
-
+//type ProgramText = &[u8];
 
 // todo remove T (we must always keep the chars... what about using references to the main program for all types?)
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum RegisterOperationType {
+    Store,
+    Load,
+    StoreStack,
+    LoadStack,
+    TosGeExecute,
+    TosGtExecute,
+    TosLeExecute,
+    TosLtExecute,
+    TosEqExecute,
+    TosNeExecute,
+}
 
-#[derive(Copy, Clone, Debug,PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum Instruction<'a> {
     Nop,
-    Num(&'a[u8]),
-    Str(&'a[u8]),
+    Num(&'a [u8]),
+    Str(&'a [u8]),
     // print
     PrintLN,
     PrintPop,
@@ -42,10 +52,7 @@ enum Instruction<'a> {
     Dup,
     Swap,
     // registers
-    Store(Register),
-    Load(Register),
-    StoreStack(Register),
-    LoadStack(Register),
+    RegisterOperation(RegisterOperationType, Register),
     // parameters
     SetInputRadix,
     SetOutputRadix,
@@ -56,12 +63,6 @@ enum Instruction<'a> {
     // string
     MakeString,
     OpToString,
-    TosGeExecute(Register),
-    TosGtExecute(Register),
-    TosLeExecute(Register),
-    TosLtExecute(Register),
-    TosEqExecute(Register),
-    TosNeExecute(Register),
     ExecuteInput,
     ReturnCaller,
     ReturnN,
@@ -70,13 +71,13 @@ enum Instruction<'a> {
     FractionDigits,
     StackDepth,
     // miscellaneous
-    System,
+    System(&'a [u8]),
     Comment,
     SetArray,
-    GetArray
+    GetArray,
 }
 
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum ParserErrorType {
     IllegalState(String),
     InvalidCharacter(u8),
@@ -84,23 +85,31 @@ enum ParserErrorType {
     EOP(String),
 }
 
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum ParserState {
     TopLevel,
     Error(usize, ParserErrorType),
-    Num{start: usize, end: usize, seen_dot: bool},
-    Register(u8),
+    Num {
+        start: usize,
+        end: usize,
+        seen_dot: bool,
+    },
+    Command {
+        start: usize,
+        end: usize,
+    },
+    Register(RegisterOperationType),
+    Mark,
     End,
 }
 
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct ParserError {
     position: usize,
     error_type: ParserErrorType,
 }
 
-fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> 
-{
+fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
     let mut state = ParserState::TopLevel;
     let mut instructions = Vec::new();
     let mut position: usize = 0;
@@ -110,15 +119,11 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError>
     }
     loop {
         match state {
-            ParserState::End => {
-                break
-            }
-            ParserState::Error(_, _) => {
-                break
-            }
+            ParserState::End => break,
+            ParserState::Error(_, _) => break,
             ParserState::TopLevel => {
                 if position >= program_text.len() {
-                    break
+                    break;
                 }
                 let ch = program_text[position];
 
@@ -126,11 +131,19 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError>
                     0 => instructions.push(Instruction::Nop),
                     b'.' => {
                         // here we effectively consume one character, so we must go through the increment
-                        state = ParserState::Num{start: position, end: position+1, seen_dot: true};
+                        state = ParserState::Num {
+                            start: position,
+                            end: position + 1,
+                            seen_dot: true,
+                        };
                     }
                     b'0'...b'9' => {
                         // here we effectively consume one character, so we must go through the increment
-                        state = ParserState::Num{start: position, end: position+1, seen_dot: false};
+                        state = ParserState::Num {
+                            start: position,
+                            end: position + 1,
+                            seen_dot: false,
+                        };
                     }
                     b'p' => instructions.push(Instruction::PrintLN),
                     b'n' => instructions.push(Instruction::PrintPop),
@@ -148,17 +161,21 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError>
                     b'c' => instructions.push(Instruction::Clear),
                     b'd' => instructions.push(Instruction::Dup),
                     b'r' => instructions.push(Instruction::Swap),
-                    b's'|b'l'|b'S'|b'L'|b'>'|b'<'|b'=' => {
-                        // consumed char for operations, move to next position to get the register
-                        state = ParserState::Register(ch)
-                    }
+                    b's' => state = ParserState::Register(RegisterOperationType::Store),
+                    b'l' => state = ParserState::Register(RegisterOperationType::Load),
+                    b'S' => state = ParserState::Register(RegisterOperationType::StoreStack),
+                    b'L' => state = ParserState::Register(RegisterOperationType::LoadStack),
+                    b'>' => state = ParserState::Register(RegisterOperationType::TosGtExecute),
+                    b'<' => state = ParserState::Register(RegisterOperationType::TosLtExecute),
+                    b'=' => state = ParserState::Register(RegisterOperationType::TosEqExecute),
+                    b'!' => state = ParserState::Mark,
                     b'i' => instructions.push(Instruction::SetInputRadix),
                     b'o' => instructions.push(Instruction::SetOutputRadix),
                     b'k' => instructions.push(Instruction::SetPrecision),
                     b'I' => instructions.push(Instruction::GetInputRadix),
                     b'O' => instructions.push(Instruction::GetOutputRadix),
                     b'K' => instructions.push(Instruction::GetPrecision),
-                    b' '|b'\n' => (), // do nothing
+                    b' ' | b'\n' => (), // do nothing
                     ch => {
                         state = ParserState::Error(position, ParserErrorType::InvalidCharacter(ch));
                         continue;
@@ -167,9 +184,12 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError>
 
                 position += 1;
             }
-            ParserState::Num{start, end, seen_dot} => {
+            ParserState::Num {
+                start,
+                end,
+                seen_dot,
+            } => {
                 if position >= program_text.len() {
-                    debug_assert!(start<end);
                     instructions.push(Instruction::Num(&program_text[start..end]));
                     state = ParserState::End;
                     break;
@@ -178,14 +198,22 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError>
                 match (seen_dot, ch) {
                     (false, b'.') => {
                         // if we are here, we were alredy building a number and finally we got the .
-                        state = ParserState::Num{start, end: end+1, seen_dot: true};
+                        state = ParserState::Num {
+                            start,
+                            end: end + 1,
+                            seen_dot: true,
+                        };
                         position += 1;
                     }
-                    (_, b'0' ... b'9') => {
-                        state = ParserState::Num{start, end: end+1, seen_dot: seen_dot};
+                    (_, b'0'...b'9') => {
+                        state = ParserState::Num {
+                            start,
+                            end: end + 1,
+                            seen_dot: seen_dot,
+                        };
                         position += 1;
                     }
-                    (true, b'.')|_ => {
+                    (true, b'.') | _ => {
                         // it means it initiates a new number, store the old and start again
                         // we must not advance the position: note that this means we are looping
                         // a bit more than necessary, but it makes the logic simpler
@@ -194,49 +222,81 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError>
                     }
                 }
             }
-            ParserState::Register(opbyte) => {
+            ParserState::Register(register_operation_type) => {
                 if position >= program_text.len() {
-                    state = ParserState::Error(position, ParserErrorType::EOP("was expecting a register".to_string()));
-                    break
+                    state = ParserState::Error(
+                        position,
+                        ParserErrorType::EOP("was expecting a register".to_string()),
+                    );
+                    break;
+                }
+                let ch = program_text[position];
+                instructions.push(Instruction::RegisterOperation(register_operation_type, ch));
+                state = ParserState::TopLevel;
+                position += 1;
+            }
+            ParserState::Mark => {
+                if position >= program_text.len() {
+                    break;
                 }
                 let ch = program_text[position];
 
-
+                match ch {
+                    b'>' => {
+                        state = ParserState::Register(RegisterOperationType::TosGeExecute);
+                    }
+                    b'<' => {
+                        state = ParserState::Register(RegisterOperationType::TosLeExecute);
+                    }
+                    b'=' => {
+                        state = ParserState::Register(RegisterOperationType::TosNeExecute);
+                    }
+                    _ => {
+                        state = ParserState::Command {
+                            start: position,
+                            end: position + 1,
+                        };
+                    }
+                }
                 position += 1;
-
+            }
+            ParserState::Command { start, end } => {
+                if position >= program_text.len() {
+                    instructions.push(Instruction::System(&program_text[start..end]));
+                    state = ParserState::End;
+                    break;
+                }
+                let ch = program_text[position];
+                if ch == b'\n' {
+                    instructions.push(Instruction::System(&program_text[start..end]));
+                    state = ParserState::TopLevel;
+                } else {
+                    state = ParserState::Command {
+                        start,
+                        end: end+1,
+                    }
+                }
+                position += 1; // let us skip the newline or mark the char as visited
             }
         }
     }
 
     return match state {
-        ParserState::Error(position, error_type) => Err(ParserError{position, error_type}),
+        ParserState::Error(position, error_type) => Err(ParserError {
+            position,
+            error_type,
+        }),
         ParserState::End => Ok(instructions),
         //ParserState::TopLevel => Err(ParserError{position: position, error_type: ParserErrorType::IllegalState("parsing stopped".to_string())}),
         ParserState::TopLevel => Ok(instructions),
-        _other => {
-
-            Err(ParserError{position: position, error_type: ParserErrorType::IllegalState("not sure".to_string())})
-        }
-    }
+        _other => Err(ParserError {
+            position: position,
+            error_type: ParserErrorType::IllegalState("not sure".to_string()),
+        }),
+    };
 }
 
-fn register_operation<'a>(opbyte: u8, register_byte: u8) -> Result<Instruction<'a>, ParserErrorType> {
-    let r : Register = register_byte as Register;
-
-    return match opbyte {
-        b's' => Ok(Instruction::Store(r)),
-        b'l' => Ok(Instruction::Load(r)),
-        b'S' => Ok(Instruction::StoreStack(r)),
-        b'L' => Ok(Instruction::LoadStack(r)),
-        b'<' => Ok(Instruction::TosLtExecute(r)),
-        b'>' => Ok(Instruction::TosGtExecute(r)),
-        b'=' => Ok(Instruction::TosEqExecute(r)),
-        ch => Err(ParserErrorType::IllegalState("there is an issue in register_operation or in the RegisterParse".to_string()))
-    }
-}
-
-
-// fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String> 
+// fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String>
 //     where T: FromStr + Default,
 //           <T as str::FromStr>::Err: error::Error
 // {
@@ -305,6 +365,18 @@ parse_tests! {
     parse_test_11: ("11", Ok(vec![Instruction::Num("11".as_bytes())])),
     parse_test_0_0: ("0 0", Ok(vec![Instruction::Num("0".as_bytes()), Instruction::Num("0".as_bytes())])),
     parse_test_1_1: ("1 1", Ok(vec![Instruction::Num("1".as_bytes()), Instruction::Num("1".as_bytes())])),
+    parse_test_la: ("la", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::Load, b'a' as Register)])),
+    parse_test_sa: ("sa", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::Store, b'a' as Register)])),
+    parse_test_l2a: ("La", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::LoadStack, b'a' as Register)])),
+    parse_test_s2a: ("Sa", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::StoreStack, b'a' as Register)])),
+    parse_test_lta: ("<a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosLtExecute, b'a' as Register)])),
+    parse_test_gta: (">a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosGtExecute, b'a' as Register)])),
+    parse_test_eqa: ("=a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosEqExecute, b'a' as Register)])),
+    parse_test_lea: ("!<a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosLeExecute, b'a' as Register)])),
+    parse_test_gea: ("!>a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosGeExecute, b'a' as Register)])),
+    parse_test_nea: ("!=a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosNeExecute, b'a' as Register)])),
+    parse_test_sysa: ("!a", Ok(vec![Instruction::System("a".as_bytes())])),
+    parse_test_ltagt: ("<>", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosLtExecute, b'>' as Register)])),
 }
 
 #[test]
@@ -313,31 +385,33 @@ fn testparse() {
     assert_eq!(expected, parse(input.as_bytes()));
 }
 
-
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 struct VMError {
     message: String,
 }
 
 struct VM {
-    input_radix: u8,// [2,16]
+    input_radix: u8,  // [2,16]
     output_radix: u8, // >= 2
-    precision: u64, // > 0, always in decimal
+    precision: u64,   // > 0, always in decimal
 }
-
 
 impl VM {
     fn new() -> VM {
-        VM{input_radix: 10, output_radix: 10, precision: 0}
+        VM {
+            input_radix: 10,
+            output_radix: 10,
+            precision: 0,
+        }
     }
 
-    fn eval(&mut self, instructions: &[Instruction])    {
-
-    }
+    fn eval(&mut self, _instructions: &[Instruction]) {}
 
     fn set_input_radix(&mut self, radix: u8) -> Result<(), VMError> {
         if radix != 10 {
-            return Err(VMError{message: "invalid radix".to_string()});
+            return Err(VMError {
+                message: "invalid radix".to_string(),
+            });
         }
         self.input_radix = radix;
         return Ok(());
@@ -345,7 +419,9 @@ impl VM {
 
     fn set_output_radix(&mut self, radix: u8) -> Result<(), VMError> {
         if radix != 10 {
-            return Err(VMError{message: "invalid radix".to_string()});
+            return Err(VMError {
+                message: "invalid radix".to_string(),
+            });
         }
         self.output_radix = radix;
         return Ok(());
@@ -355,7 +431,6 @@ impl VM {
         self.precision = precision;
         return Ok(());
     }
-
 }
 
 #[test]
@@ -367,7 +442,7 @@ fn test_input_radix() {
 #[test]
 fn test_input_radix_fail() {
     let mut vm = VM::new();
-    assert!(vm.set_input_radix(50).is_err()); 
+    assert!(vm.set_input_radix(50).is_err());
 }
 
 #[test]
@@ -379,7 +454,7 @@ fn test_output_radix() {
 #[test]
 fn test_output_radix_fail() {
     let mut vm = VM::new();
-    assert!(vm.set_output_radix(50).is_err()); 
+    assert!(vm.set_output_radix(50).is_err());
 }
 
 #[test]
@@ -396,7 +471,7 @@ enum ProgramSource {
 impl ProgramSource {
     fn into_bytes<'a>(self, buffer: &mut Vec<u8>) -> Result<usize, std::io::Error> {
         match self {
-            ProgramSource::Text(mut text_str) => {
+            ProgramSource::Text(text_str) => {
                 return Ok(buffer.write(text_str.as_bytes())?);
             }
             ProgramSource::File(filename) => {
@@ -406,9 +481,7 @@ impl ProgramSource {
             }
         }
     }
-
 }
-
 
 fn main() {
     // let us implement the real app to understand approaches to ownership
@@ -422,23 +495,17 @@ fn main() {
 
     while let Some(arg) = args.next() {
         match arg.as_ref() {
-            "-e"|"--expression" => {
-                match args.next() {
-                    Some(text) => program_sources.push(ProgramSource::Text(text)),
-                    None => print_help(1),
-                }
-
-            }
-            "-f"|"--file" => {
-                match args.next() {
-                    Some(file) => program_sources.push(ProgramSource::File(file)),
-                    None => print_help(1),
-                }
-
-            }
-            "-h"|"--help" => print_help(0),
-            "-v"|"--version" => print_version(0),
-            file => {
+            "-e" | "--expression" => match args.next() {
+                Some(text) => program_sources.push(ProgramSource::Text(text)),
+                None => print_help(1),
+            },
+            "-f" | "--file" => match args.next() {
+                Some(file) => program_sources.push(ProgramSource::File(file)),
+                None => print_help(1),
+            },
+            "-h" | "--help" => print_help(0),
+            "-v" | "--version" => print_version(0),
+            _ => {
                 positional_program_sources.push(ProgramSource::File(arg.to_string()));
             }
         }
@@ -450,17 +517,21 @@ fn main() {
             Ok(bytes) => match parse(&source_code[..bytes]) {
                 Err(parse_error) => {
                     // TODO I should use a description
-                    let _ = writeln!(std::io::stderr(), "{:?} at col {}", parse_error.error_type, parse_error.position).unwrap();
+                    let _ = writeln!(
+                        std::io::stderr(),
+                        "{:?} at col {}",
+                        parse_error.error_type,
+                        parse_error.position
+                    ).unwrap();
                 }
                 Ok(instructions) => {
                     vm.eval(&instructions[..]);
                 }
-            }
+            },
             Err(error) => {
                 eprintln!("error processing file {}", error);
             }
         }
-
     }
 }
 
@@ -471,38 +542,3 @@ fn print_help(code: i32) {
 fn print_version(code: i32) {
     std::process::exit(code);
 }
-
-// impl<'a, T> Parser<'a, T> {
-//     fn parse(mut &self) {
-//         while self.col < self.program_text.len()  {
-//             match self.parser {
-//                 ParserState::TopLevel => {
-//                     let current = self.program_text[self.col];
-//                     match current {
-//                         0 => {
-//                             match byte_to_instruction(current) {
-//                                 Some(instruction) => {
-//                                     self.instructions.push(instruction);
-//                                     self.col += 1;
-//                                 }
-//                                 None => {
-//                                     self.parser = ParserState::Error(self.col, ErrorType::IllegalState);
-//                                 }
-//                             }
-//                         }
-//                         _ => {
-
-//                         }
-//                     }
-
-//                 }
-//                 ParserState::Error(_, _) => {
-//                     return 
-//                 }
-//                 ParserState::End => {
-//                     return
-//                 }
-//             }
-//         }
-//     }
-// }
