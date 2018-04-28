@@ -7,8 +7,6 @@ use std::io::prelude::*;
 use std::ops::Range;
 use std::fmt;
 
-use num::Num;
-
 type Register = u8;
 //type ProgramText = &[u8];
 
@@ -392,8 +390,132 @@ fn testparse() {
     assert_eq!(expected, parse(input.as_bytes()));
 }
 
+
+
+#[derive(Clone, Debug, PartialEq)]
+enum MemoryCell<'a, T> 
+    where T : num::Num {
+    Str(&'a [u8]),
+    Num(T)
+}
+
+impl<'a, T: num::Num> MemoryCell<'a, T> {
+    fn is_num(&self) -> bool {
+        match self {
+            &MemoryCell::Num(..) => true,
+            &MemoryCell::Str(..) => false,
+        }
+    }
+
+    // fn num() .. how can it work? sometimes the area would be consumed, sometimes it would not.
+    // hey use ref!
+}
+
+
+
+#[derive(Clone, Debug, Copy, PartialEq)]
+enum DCError {
+    StackEmpty,
+    NonNumericValue,
+}
+
+static STACK_EMPTY: &'static str = "stack empty";
+static NON_NUMERIC_VALUE: &'static str = "non numeric value";
+
+impl fmt::Display for DCError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let message = match self {
+            &DCError::StackEmpty => &STACK_EMPTY,
+            &DCError::NonNumericValue => &NON_NUMERIC_VALUE,
+        };
+        write!(f, "{}", message)?;
+        Ok(())
+    }
+}
+
+struct DCStack<'a, T: num::Num> { stack: Vec<MemoryCell<'a, T>>,
+} 
+
+macro_rules! dcstack {
+    ( $ ( $ x : expr ) , * ) => {
+        let mut dcstack = DCStack::new();
+        $( dcstack.push($x); )*
+        dcstack
+    }
+}
+
+impl<'a, T: num::Num+Clone> DCStack<'a, T> {
+    fn new() -> DCStack<'a, T> {
+        DCStack{stack: Vec::new()}
+    }
+
+    fn pop_num(&mut self) -> Result<T, DCError> {
+        
+        let stack = &mut self.stack[..];
+        match &mut stack[stack.len() -1] {
+            &mut MemoryCell::Num(ref n) => Ok(n.clone()), // bad borrow
+            &mut MemoryCell::Str(s) => {
+                Err(DCError::NonNumericValue)
+            }
+        }
+    }
+
+        
+    // fn pop_num(&mut self) -> Result<T, DCError> {
+    //      match self.stack. {
+    //     //     &mut MemoryCell::Num(ref n) => Ok(*n), // bad borrow
+    //     //     &mut MemoryCell::Str(s) => {
+    //     //         Err(DCError::NonNumericValue)
+    //     //     }
+    //     // }
+    //      }
+    // }
+
+    fn pop_num2(&mut self) -> Result<T, DCError> {
+        match self.stack.pop() {
+            Some(MemoryCell::Num(n)) => Ok(n),
+            Some(MemoryCell::Str(s)) => {
+                // TODO 
+                self.stack.push(MemoryCell::Str(s));
+                Err(DCError::NonNumericValue)
+            }
+            None => Err(DCError::StackEmpty),
+        }
+    }
+
+    // fn pop(&mut self) -> Result<MemoryCell<T>, DCError> {
+    //     match self.stack.pop() {
+    //         Some(value) => Ok(value),
+    //         None => ,
+    //     }
+    // }
+
+}
+#[derive(Clone, Debug, PartialEq)]
+enum VMErrorType {
+    StackEmpty,
+    InvalidInputRadix,
+    InvalidOutputRadix,
+}
+
+static INVALID_INPUT_RADIX: &'static str = "invalid input radix";
+static INVALID_OUTPUT_RADIX: &'static str = "invalid input radix";
+
+impl fmt::Display for VMErrorType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let message = match self {
+            &VMErrorType::StackEmpty => &STACK_EMPTY,
+            &VMErrorType::InvalidInputRadix => &INVALID_INPUT_RADIX,
+            &VMErrorType::InvalidOutputRadix => &INVALID_OUTPUT_RADIX,
+        };
+        write!(f, "{}", message)?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 struct VMError {
+    error_type: VMErrorType,
     message: String,
 }
 
@@ -409,23 +531,17 @@ impl std::error::Error for VMError {
     }
 }
 
-enum MemoryCell<'a, T> 
-    where T : num::Num {
-    Str(&'a [u8]),
-    Num(T)
-}
-
 struct VM<'a, T: num::Num> {
-    stack: Vec<MemoryCell<'a, T>>,
+    stack: DCStack<'a, T>,
     input_radix: u8,  // [2,16]
     output_radix: u8, // >= 2
     precision: u64,   // > 0, always in decimal
 }
 
-impl<'a, T: num::Num> VM<'a, T> {
+impl<'a, T: num::Num+Clone> VM<'a, T> {
     fn new() -> VM<'a, T> {
         VM::<T> {
-            stack: Vec::new(),
+            stack: DCStack::new(),
             input_radix: 10,
             output_radix: 10,
             precision: 0,
@@ -439,13 +555,20 @@ impl<'a, T: num::Num> VM<'a, T> {
         Ok(())
     }
 
-    fn eval_instruction(&mut self, _instruction: &Instruction) -> Result<(), VMError> {
+    fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
+        match instruction {
+            &Instruction:: SetInputRadix => {
+
+            }
+            _ => {}
+        }
         Ok(())
     }
 
     fn set_input_radix(&mut self, radix: u8) -> Result<(), VMError> {
         if radix != 10 {
             return Err(VMError {
+                error_type: VMErrorType::InvalidInputRadix,
                 message: "invalid radix".to_string(),
             });
         }
@@ -456,6 +579,7 @@ impl<'a, T: num::Num> VM<'a, T> {
     fn set_output_radix(&mut self, radix: u8) -> Result<(), VMError> {
         if radix != 10 {
             return Err(VMError {
+                error_type: VMErrorType::InvalidOutputRadix,
                 message: "invalid radix".to_string(),
             });
         }
