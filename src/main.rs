@@ -35,7 +35,7 @@ impl ProgramSource {
 fn main() {
     // let us implement the real app to understand approaches to ownership
 
-    let mut vm = vm::VM::<f64>::new();
+    let mut vm = vm::VM::<u64>::new();
 
     let mut args = std::env::args().skip(1);
 

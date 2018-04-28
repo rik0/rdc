@@ -1,6 +1,7 @@
 
 use std::fmt;
 use std::error;
+use std::convert::{From, Into};
 
 use num;
 use dcstack;
@@ -8,7 +9,8 @@ use instructions::*;
 
 
 #[derive(Clone, Debug, PartialEq)]
-enum VMErrorType {
+pub enum VMError {
+    StackError(dcstack::DCError),
     InvalidInputRadix,
     InvalidOutputRadix,
 }
@@ -16,43 +18,46 @@ enum VMErrorType {
 static INVALID_INPUT_RADIX: &'static str = "invalid input radix";
 static INVALID_OUTPUT_RADIX: &'static str = "invalid input radix";
 
-impl fmt::Display for VMErrorType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let message = match self {
-            &VMErrorType::InvalidInputRadix => &INVALID_INPUT_RADIX,
-            &VMErrorType::InvalidOutputRadix => &INVALID_OUTPUT_RADIX,
-        };
-        write!(f, "{}", message)?;
-        Ok(())
+impl VMError {
+    fn message(&self) -> &'static str {
+        match self {
+            &VMError::InvalidInputRadix => &INVALID_INPUT_RADIX,
+            &VMError::InvalidOutputRadix => &INVALID_OUTPUT_RADIX,
+            &VMError::StackError(dcerror) => dcerror.message(),
+        }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct VMError {
-    error_type: VMErrorType,
-    message: String,
 }
 
 impl fmt::Display for VMError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.message)
+        write!(f, "{}", self.message())?;
+        Ok(())
     }
 }
+
 
 impl error::Error for VMError {
     fn description(&self) -> &str {
-        &self.message
+        self.message()
     }
 }
 
-pub struct VM<'a, T: num::Num> {
+impl From<dcstack::DCError> for VMError {
+    fn from(error: dcstack::DCError) -> VMError {
+        VMError::StackError(error)
+    }
+}
+
+pub struct VM<'a, T: num::Num + From<u32> > {
     stack: dcstack::DCStack<'a, T>,
     input_radix: u8,  // [2,16]
     output_radix: u8, // >= 2
     precision: u64,   // > 0, always in decimal
 }
 
-impl<'a, T: num::Num+Clone> VM<'a, T> {
+impl<'a, T: num::Num + From<u32>> VM<'a, T> 
+    where u64: From<T>
+{
     pub fn new() -> VM<'a, T> {
         VM::<T> {
             stack: dcstack::DCStack::new(),
@@ -72,67 +77,61 @@ impl<'a, T: num::Num+Clone> VM<'a, T> {
     fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
         match instruction {
             &Instruction:: SetInputRadix => {
-
+                let n : T = self.stack.pop_num()?;
+                self.set_input_radix(n)
             }
-            _ => {}
+            _ => Ok(())
         }
-        Ok(())
     }
 
-    fn set_input_radix(&mut self, radix: u8) -> Result<(), VMError> {
-        if radix != 10 {
-            return Err(VMError {
-                error_type: VMErrorType::InvalidInputRadix,
-                message: "invalid radix".to_string(),
-            });
+    fn set_input_radix(&mut self, radix: T) -> Result<(), VMError> {
+        if radix != T::from(10) {
+            return Err(VMError::InvalidInputRadix);
         }
-        self.input_radix = radix;
+        self.input_radix = 10;
         return Ok(());
     }
 
-    fn set_output_radix(&mut self, radix: u8) -> Result<(), VMError> {
-        if radix != 10 {
-            return Err(VMError {
-                error_type: VMErrorType::InvalidOutputRadix,
-                message: "invalid radix".to_string(),
-            });
+    fn set_output_radix(&mut self, radix: T) -> Result<(), VMError> {
+        if radix != T::from(10) {
+            return Err(VMError::InvalidOutputRadix);
         }
-        self.output_radix = radix;
+        self.output_radix = 10;
         return Ok(());
     }
 
-    fn set_precision(&mut self, precision: u64) -> Result<(), VMError> {
-        self.precision = precision;
+    fn set_precision(&mut self, precision: T) -> Result<(), VMError> {
+        self.precision = T::into(precision);
         return Ok(());
     }
 }
 
 #[test]
 fn test_input_radix() {
-    let mut vm = VM::<f64>::new();
+    let mut vm = VM::<u64>::new();
     assert!(vm.set_input_radix(10).is_ok());
 }
 
 #[test]
 fn test_input_radix_fail() {
-    let mut vm = VM::<f64>::new();
+    let mut vm = VM::<u64>::new();
     assert!(vm.set_input_radix(50).is_err());
 }
 
 #[test]
 fn test_output_radix() {
-    let mut vm = VM::<f64>::new();
+    let mut vm = VM::<u64>::new();
     assert!(vm.set_output_radix(10).is_ok());
 }
 
 #[test]
 fn test_output_radix_fail() {
-    let mut vm = VM::<f64>::new();
+    let mut vm = VM::<u64>::new();
     assert!(vm.set_output_radix(50).is_err());
 }
 
 #[test]
 fn test_precision() {
-    let mut vm = VM::<f64>::new();
+    let mut vm = VM::<u64>::new();
     assert!(vm.set_precision(10).is_ok());
 }
