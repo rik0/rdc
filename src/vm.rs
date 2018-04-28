@@ -96,8 +96,8 @@ impl<'a> VM<'a>
                 let n : BigDecimal = self.stack.pop_num()?;
                 self.set_output_radix(n)
             }
-            &Instruction::GetInputRadix => {
-                self.stack.push_num(self.outpur_radix);
+            &Instruction::GetOutputRadix => {
+                self.stack.push_num(self.output_radix);
                 Ok(())
             }
             _ => Ok(())
