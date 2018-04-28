@@ -72,7 +72,7 @@ pub struct DCStack<'a> {
 macro_rules! dcstack {
     ( $ ( $ x : expr ) , * ) => ({
         let mut dcstack = DCStack::new();
-        $( dcstack.push_num($x); )*
+        $( dcstack.push(MemoryCell::from($x)); )*
         dcstack
     })
 }
@@ -91,11 +91,15 @@ impl<'a> DCStack<'a> {
     }
 
     pub fn push_num(&mut self, item: BigDecimal) {
-        self.stack.push(MemoryCell::Num(item));
+        self.push(MemoryCell::Num(item));
     }
 
     pub fn push_str(&mut self, item: &'a [u8]) {
-        self.stack.push(MemoryCell::Str(item))
+        self.push(MemoryCell::Str(item))
+    }
+
+    pub fn push(&mut self, item: MemoryCell<'a>) {
+        self.stack.push(item)
     }
 
     pub fn pop_num(&mut self) -> Result<BigDecimal, DCError> {
@@ -110,14 +114,6 @@ impl<'a> DCStack<'a> {
             None => Err(DCError::StackEmpty),
         }
     }
-
-    // fn pop(&mut self) -> Result<MemoryCell<T>, DCError> {
-    //     match self.stack.pop() {
-    //         Some(value) => Ok(value),
-    //         None => ,
-    //     }
-    // }
-
 }
 
 #[test]
@@ -127,10 +123,10 @@ fn test_stack_empty_pop_num() {
 }
 
 
-// #[test]
-// fn test_stack_pop_num_num() {
-//     let mut s = dcstack![0];
-//     assert_eq!(0, s.pop_num().expect("i should not be empty"));
-//     assert!(s.is_empty());
-// }
+#[test]
+fn test_stack_pop_num_num() {
+    let mut s = dcstack![0];
+    assert_eq!(BigDecimal::from(0), s.pop_num().expect("i should not be empty"));
+    assert!(s.is_empty());
+}
 
