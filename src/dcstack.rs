@@ -1,8 +1,11 @@
 use num;
+use std::iter;
 use fmt;
 use std::error;
 
 use num::bigint::BigInt;
+
+use bigdecimal;
 use bigdecimal::BigDecimal;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,9 +23,10 @@ impl<'a> MemoryCell<'a> {
     }
 }
 
-impl<'a> From<u64> for MemoryCell<'a> {
-    fn from(n: u64) -> MemoryCell<'a> {
-        MemoryCell::Num(BigDecimal::new(BigInt::from(n), 0))
+impl<'a, T> From<T> for MemoryCell<'a> 
+    where bigdecimal::BigDecimal: From<T> {
+    fn from(n: T) -> MemoryCell<'a> {
+        MemoryCell::Num(BigDecimal::from(n))
     }
 }
 
@@ -90,8 +94,9 @@ impl<'a> DCStack<'a> {
         self.stack.is_empty()
     }
 
-    pub fn push_num(&mut self, item: BigDecimal) {
-        self.push(MemoryCell::Num(item));
+    pub fn push_num<U>(&mut self, item: U) 
+        where BigDecimal: From<U> {
+        self.push(MemoryCell::from(item))
     }
 
     pub fn push_str(&mut self, item: &'a [u8]) {

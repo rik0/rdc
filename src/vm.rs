@@ -62,6 +62,8 @@ pub struct VM<'a> {
     precision: u64,   // > 0, always in decimal
 }
 
+
+
 impl<'a> VM<'a> 
 {
     pub fn new() -> VM<'a> {
@@ -85,6 +87,18 @@ impl<'a> VM<'a>
             &Instruction:: SetInputRadix => {
                 let n : BigDecimal = self.stack.pop_num()?;
                 self.set_input_radix(n)
+            }
+            &Instruction::GetInputRadix => {
+                self.stack.push_num(self.input_radix);
+                Ok(())
+            }
+            &Instruction:: SetOutputRadix => {
+                let n : BigDecimal = self.stack.pop_num()?;
+                self.set_output_radix(n)
+            }
+            &Instruction::GetInputRadix => {
+                self.stack.push_num(self.outpur_radix);
+                Ok(())
             }
             _ => Ok(())
         }
