@@ -1,13 +1,17 @@
+extern crate num;
+
 use std::io::Write;
 use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
 use std::ops::Range;
+use std::fmt;
+
+use num::Num;
 
 type Register = u8;
 //type ProgramText = &[u8];
 
-// todo remove T (we must always keep the chars... what about using references to the main program for all types?)
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum RegisterOperationType {
     Store,
@@ -393,22 +397,51 @@ struct VMError {
     message: String,
 }
 
-struct VM {
+impl fmt::Display for VMError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for VMError {
+    fn description(&self) -> &str {
+        &self.message
+    }
+}
+
+enum MemoryCell<'a, T> 
+    where T : num::Num {
+    Str(&'a [u8]),
+    Num(T)
+}
+
+struct VM<'a, T: num::Num> {
+    stack: Vec<MemoryCell<'a, T>>,
     input_radix: u8,  // [2,16]
     output_radix: u8, // >= 2
     precision: u64,   // > 0, always in decimal
 }
 
-impl VM {
-    fn new() -> VM {
-        VM {
+impl<'a, T: num::Num> VM<'a, T> {
+    fn new() -> VM<'a, T> {
+        VM::<T> {
+            stack: Vec::new(),
             input_radix: 10,
             output_radix: 10,
             precision: 0,
         }
     }
 
-    fn eval(&mut self, _instructions: &[Instruction]) {}
+    fn eval(&mut self, instructions: &[Instruction]) -> Result<(), VMError> {
+        for instruction in instructions {
+            self.eval_instruction(instruction)?;
+        }
+        Ok(())
+    }
+
+    fn eval_instruction(&mut self, _instruction: &Instruction) -> Result<(), VMError> {
+        Ok(())
+    }
 
     fn set_input_radix(&mut self, radix: u8) -> Result<(), VMError> {
         if radix != 10 {
@@ -438,31 +471,31 @@ impl VM {
 
 #[test]
 fn test_input_radix() {
-    let mut vm = VM::new();
+    let mut vm = VM::<f64>::new();
     assert!(vm.set_input_radix(10).is_ok());
 }
 
 #[test]
 fn test_input_radix_fail() {
-    let mut vm = VM::new();
+    let mut vm = VM::<f64>::new();
     assert!(vm.set_input_radix(50).is_err());
 }
 
 #[test]
 fn test_output_radix() {
-    let mut vm = VM::new();
+    let mut vm = VM::<f64>::new();
     assert!(vm.set_output_radix(10).is_ok());
 }
 
 #[test]
 fn test_output_radix_fail() {
-    let mut vm = VM::new();
+    let mut vm = VM::<f64>::new();
     assert!(vm.set_output_radix(50).is_err());
 }
 
 #[test]
 fn test_precision() {
-    let mut vm = VM::new();
+    let mut vm = VM::<f64>::new();
     assert!(vm.set_precision(10).is_ok());
 }
 
@@ -489,7 +522,7 @@ impl ProgramSource {
 fn main() {
     // let us implement the real app to understand approaches to ownership
 
-    let mut vm = VM::new();
+    let mut vm = VM::<f64>::new();
 
     let mut args = std::env::args().skip(1);
 
@@ -528,7 +561,12 @@ fn main() {
                     ).unwrap();
                 }
                 Ok(instructions) => {
-                    vm.eval(&instructions[..]);
+                    if let Some(error) = vm.eval(&instructions[..]).err() {
+                        eprintln!("error processing {}: {}", 
+                            String::from_utf8(source_code.clone()) // TODO: fixme
+                                .unwrap_or("program is not utf8".to_string()), 
+                            error);
+                    }
                 }
             },
             Err(error) => {
