@@ -20,6 +20,8 @@ enum RegisterOperationType {
     TosLtExecute,
     TosEqExecute,
     TosNeExecute,
+    SetArray,
+    GetArray,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -56,20 +58,17 @@ enum Instruction<'a> {
     GetOutputRadix,
     GetPrecision,
     // string
-    //MakeString,
-    //OpToString,
-    //ExecuteInput,
-    //ReturnCaller,
-    //ReturnN,
+    OpToString,
+    ExecuteInput,
+    ReturnCaller,
+    ReturnN,
     // status enquiry
-    // Digits,
-    // FractionDigits,
-    // StackDepth,
+    Digits,
+    FractionDigits,
+    StackDepth,
     // miscellaneous
     System(&'a [u8]),
-    //Comment,
-    //SetArray,
-    //GetArray,
+    Comment(&'a [u8]),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -79,19 +78,21 @@ enum ParserErrorType {
 }
 
 const STRING_TERMINATOR : u8 = b']';
-const SYSTEM_TERMINATOR : u8 = b'\n';
+const NEWLINE_BYTE : u8 = b'\n';
 
 #[derive(Clone, Debug, PartialEq)]
 enum Terminator {
     String,
     System,
+    Comment,
 }
 
 impl PartialEq<u8> for Terminator {
     fn eq(&self, other: &u8) -> bool {
         match self {
             &Terminator::String => &STRING_TERMINATOR == other,
-            &Terminator::System => &SYSTEM_TERMINATOR == other,
+            &Terminator::System => &NEWLINE_BYTE == other,
+            &Terminator::Comment => &NEWLINE_BYTE == other,
         }
     }
 }
@@ -190,6 +191,10 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                     instructions.push(Instruction::System(&program_text[range]));
                     Ok(instructions)
                 }
+                ParserState::ReadUntilByte{terminator: Terminator::Comment, range } => {
+                    instructions.push(Instruction::Comment(&program_text[range]));
+                    Ok(instructions)
+                }
             }
         }
         state = match (state, program_text[position]) {
@@ -236,6 +241,16 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
             (ParserState::TopLevel, b'O') => incrementing![position;push_and_toplevel![instructions; Instruction::GetOutputRadix]],
             (ParserState::TopLevel, b'K') => incrementing![position;push_and_toplevel![instructions; Instruction::GetPrecision]],
             (ParserState::TopLevel, b'[') => incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::String}],
+            (ParserState::TopLevel, b'a') => incrementing![position;push_and_toplevel![instructions; Instruction::OpToString]],
+            (ParserState::TopLevel, b'Z') => incrementing![position;push_and_toplevel![instructions; Instruction::Digits]],
+            (ParserState::TopLevel, b'X') => incrementing![position;push_and_toplevel![instructions; Instruction::FractionDigits]],
+            (ParserState::TopLevel, b'z') => incrementing![position;push_and_toplevel![instructions; Instruction::StackDepth]],
+            (ParserState::TopLevel, b'#') => incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::Comment}],
+            (ParserState::TopLevel, b':') => incrementing![position;ParserState::Register(RegisterOperationType::SetArray)],
+            (ParserState::TopLevel, b';') => incrementing![position;ParserState::Register(RegisterOperationType::GetArray)],
+            (ParserState::TopLevel, b'?') => incrementing![position;push_and_toplevel![instructions; Instruction::ExecuteInput]],
+            (ParserState::TopLevel, b'q') => incrementing![position;push_and_toplevel![instructions; Instruction::ReturnCaller]],
+            (ParserState::TopLevel, b'Q') => incrementing![position;push_and_toplevel![instructions; Instruction::ReturnN]],
             (ParserState::TopLevel, b' ') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, b'\n') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, ch) => ParserState::Error(position, ParserErrorType::InvalidCharacter(ch)),
@@ -251,12 +266,15 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
             (ParserState::Mark, _) => incrementing![position; ParserState::ReadUntilByte { terminator: Terminator::System, range: position .. position+1 }],
             (ParserState::PrepareToReadUntil{ref terminator}, ch) if *terminator == ch => incrementing![position; ParserState::TopLevel],
             (ParserState::PrepareToReadUntil{terminator}, _) => incrementing![position; ParserState::ReadUntilByte{terminator, range: position..position+1}],
-            (ParserState::ReadUntilByte{ref terminator, range: Range{start, end}}, ch @ SYSTEM_TERMINATOR) if *terminator == ch => incrementing![
+            (ParserState::ReadUntilByte{terminator: Terminator::System, range: Range{start, end}}, NEWLINE_BYTE) => incrementing![
                 position;
                 push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])]], 
-            (ParserState::ReadUntilByte{ref terminator, range: Range{start, end}}, ch @ STRING_TERMINATOR) if *terminator == ch => incrementing![
+            (ParserState::ReadUntilByte{terminator: Terminator::String , range: Range{start, end}}, STRING_TERMINATOR) => incrementing![
                 position;
                 push_and_toplevel![instructions; Instruction::Str(&program_text[start .. end])]], 
+            (ParserState::ReadUntilByte{terminator: Terminator::Comment , range: Range{start, end}}, NEWLINE_BYTE) => incrementing![
+                position;
+                push_and_toplevel![instructions; Instruction::Comment(&program_text[start .. end])]], 
             (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, _) => incrementing![position; ParserState::ReadUntilByte{terminator, range: start .. end+1}],
         }
     }
@@ -292,7 +310,7 @@ macro_rules! parse_tests {
 
 parse_tests! {
     parse_test_empty: ("", Ok(vec![])),
-    parse_test_invalid: ("z", Err(ParserError{position: 0, error_type: ParserErrorType::InvalidCharacter(b'z')})),
+    parse_test_invalid: ("\x01", Err(ParserError{position: 0, error_type: ParserErrorType::InvalidCharacter(1)})),
     parse_test_zero: ("\0", Ok(vec![Instruction::Nop])),
     parse_test_p: ("p", Ok(vec![Instruction::PrintLN])),
     parse_test_n: ("n", Ok(vec![Instruction::PrintPop])),
@@ -349,6 +367,18 @@ parse_tests! {
     parse_test_str_aanl: ("[aa\n]", Ok(vec![Instruction::Str("aa\n".as_bytes())])), 
     parse_test_str_quoteaanl: ("[!aa\n]", Ok(vec![Instruction::Str("!aa\n".as_bytes())])), 
     parse_test_str_aa_not_term: ("[aa", Ok(vec![Instruction::Str("aa".as_bytes())])), 
+    parse_test_a: ("a", Ok(vec![Instruction::OpToString])),
+    parse_test_z2: ("Z", Ok(vec![Instruction::Digits])),
+    parse_test_x2: ("X", Ok(vec![Instruction::FractionDigits])),
+    parse_test_z: ("z", Ok(vec![Instruction::StackDepth])),
+    parse_test_comment1: ("10 # foo 20", Ok(vec![Instruction::Num("10".as_bytes()), Instruction::Comment(" foo 20".as_bytes())])),
+    parse_test_comment2: ("10 # foo\n20", Ok(vec![Instruction::Num("10".as_bytes()), Instruction::Comment(" foo".as_bytes()), Instruction::Num("20".as_bytes())])),
+    parse_test_set_array: (":a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::SetArray, b'a' as Register)])),
+    parse_test_get_array: (";a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::GetArray, b'a' as Register)])),
+    parse_test_input: ("?", Ok(vec![Instruction::ExecuteInput])),
+    parse_test_return_caller: ("q", Ok(vec![Instruction::ReturnCaller])),
+    parse_test_returnn: ("Q", Ok(vec![Instruction::ReturnN])),
+
     // add failure tests 
 }
 
