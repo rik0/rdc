@@ -26,7 +26,7 @@ enum RegisterOperationType {
 enum Instruction<'a> {
     Nop,
     Num(&'a [u8]),
-    //Str(&'a [u8]),
+    Str(&'a [u8]),
     // print
     PrintLN,
     PrintPop,
@@ -78,6 +78,11 @@ enum ParserErrorType {
     EOP(String),
 }
 
+type Terminator = u8;
+
+const STRING_TERMINATOR : Terminator = b']';
+const SYSTEM_TERMINATOR : Terminator = b'\n';
+
 #[derive(Clone, Debug, PartialEq)]
 enum ParserState {
     TopLevel,
@@ -87,7 +92,8 @@ enum ParserState {
         end: usize,
         seen_dot: bool,
     },
-    ReadUntilByte{terminator: u8, range: Range<usize>},
+    PrepareToReadUntil{terminator: Terminator},
+    ReadUntilByte{terminator: Terminator, range: Range<usize>},
     Command {
         start: usize,
         end: usize,
@@ -165,6 +171,12 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                     instructions.push(Instruction::System(&program_text[start..end]));
                     Ok(instructions)
                 }
+                // dc actually seg faults in this case
+                ParserState::PrepareToReadUntil{terminator: STRING_TERMINATOR} => Err(ParserError{
+                    position,
+                    error_type: ParserErrorType::EOP("string not completed".to_string())
+                }),
+                ParserState::PrepareToReadUntil{..} => Ok(instructions),
                 ParserState::ReadUntilByte{terminator: _terminator , range } => {
                     instructions.push(Instruction::System(&program_text[range]));
                     Ok(instructions)
@@ -214,6 +226,7 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
             (ParserState::TopLevel, b'I') => incrementing![position;push_and_toplevel![instructions; Instruction::GetInputRadix]],
             (ParserState::TopLevel, b'O') => incrementing![position;push_and_toplevel![instructions; Instruction::GetOutputRadix]],
             (ParserState::TopLevel, b'K') => incrementing![position;push_and_toplevel![instructions; Instruction::GetPrecision]],
+            (ParserState::TopLevel, b'[') => incrementing![position; ParserState::PrepareToReadUntil{terminator: STRING_TERMINATOR}],
             (ParserState::TopLevel, b' ') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, b'\n') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, ch) => ParserState::Error(position, ParserErrorType::InvalidCharacter(ch)),
@@ -229,9 +242,14 @@ fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
             (ParserState::Mark, _) => incrementing![position; ParserState::Command { start: position, end: position+1, }],
             (ParserState::Command { start, end }, b'\n') => incrementing![position; push_and_toplevel![instructions; Instruction::System(&program_text[start..end])]],
             (ParserState::Command { start, end }, _) => incrementing![position; ParserState::Command { start, end: end+1 }],
-            (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, ch) if ch == terminator => incrementing![
+            (ParserState::PrepareToReadUntil{terminator}, ch) if terminator == ch => incrementing![position; ParserState::TopLevel],
+            (ParserState::PrepareToReadUntil{terminator}, _) => incrementing![position; ParserState::ReadUntilByte{terminator, range: position..position+1}],
+            (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, ch @ b'\n') if ch == terminator => incrementing![
                 position;
                 push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])]], 
+            (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, ch @ b']') if ch == terminator => incrementing![
+                position;
+                push_and_toplevel![instructions; Instruction::Str(&program_text[start .. end])]], 
             (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, _) => incrementing![position; ParserState::ReadUntilByte{terminator, range: start .. end+1}],
         }
     }
@@ -317,7 +335,14 @@ parse_tests! {
     parse_test_gea: ("!>a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosGeExecute, b'a' as Register)])),
     parse_test_nea: ("!=a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosNeExecute, b'a' as Register)])),
     parse_test_sysa: ("!a", Ok(vec![Instruction::System("a".as_bytes())])),
+    parse_test_sysa10: ("!a\n10", Ok(vec![Instruction::System("a".as_bytes()), Instruction::Num("10".as_bytes())])),
     parse_test_ltagt: ("<>", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosLtExecute, b'>' as Register)])),
+    parse_test_str_aa3: ("[aa]3", Ok(vec![Instruction::Str("aa".as_bytes()), Instruction::Num("3".as_bytes())])), 
+    parse_test_str_aa: ("[aa]", Ok(vec![Instruction::Str("aa".as_bytes())])), 
+    parse_test_str_aanl: ("[aa\n]", Ok(vec![Instruction::Str("aa\n".as_bytes())])), 
+    parse_test_str_quoteaanl: ("[!aa\n]", Ok(vec![Instruction::Str("!aa\n".as_bytes())])), 
+    parse_test_str_aa_not_term: ("[aa", Ok(vec![Instruction::Str("aa".as_bytes())])), 
+    // add failure tests 
 }
 
 #[test]
