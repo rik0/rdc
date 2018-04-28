@@ -3,7 +3,11 @@ use std::fmt;
 use std::error;
 use std::convert::{From, Into};
 
+use bigdecimal::BigDecimal;
+
 use num;
+use num::ToPrimitive;
+
 use dcstack;
 use instructions::*;
 
@@ -13,16 +17,19 @@ pub enum VMError {
     StackError(dcstack::DCError),
     InvalidInputRadix,
     InvalidOutputRadix,
+    InvalidPrecision,
 }
 
 static INVALID_INPUT_RADIX: &'static str = "invalid input radix";
-static INVALID_OUTPUT_RADIX: &'static str = "invalid input radix";
+static INVALID_OUTPUT_RADIX: &'static str = "invalid output radix";
+static INVALID_PRECISION: &'static str = "invalid precision";
 
 impl VMError {
     fn message(&self) -> &'static str {
         match self {
             &VMError::InvalidInputRadix => &INVALID_INPUT_RADIX,
             &VMError::InvalidOutputRadix => &INVALID_OUTPUT_RADIX,
+            &VMError::InvalidPrecision => &INVALID_PRECISION,
             &VMError::StackError(dcerror) => dcerror.message(),
         }
     }
@@ -48,18 +55,17 @@ impl From<dcstack::DCError> for VMError {
     }
 }
 
-pub struct VM<'a, T: num::Num + From<u32> > {
-    stack: dcstack::DCStack<'a, T>,
-    input_radix: u8,  // [2,16]
-    output_radix: u8, // >= 2
+pub struct VM<'a> {
+    stack: dcstack::DCStack<'a>,
+    input_radix: u32,  // [2,16]
+    output_radix: u32, // >= 2
     precision: u64,   // > 0, always in decimal
 }
 
-impl<'a, T: num::Num + From<u32>> VM<'a, T> 
-    where u64: From<T>
+impl<'a> VM<'a> 
 {
-    pub fn new() -> VM<'a, T> {
-        VM::<T> {
+    pub fn new() -> VM<'a> {
+        VM {
             stack: dcstack::DCStack::new(),
             input_radix: 10,
             output_radix: 10,
@@ -77,61 +83,64 @@ impl<'a, T: num::Num + From<u32>> VM<'a, T>
     fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
         match instruction {
             &Instruction:: SetInputRadix => {
-                let n : T = self.stack.pop_num()?;
+                let n : BigDecimal = self.stack.pop_num()?;
                 self.set_input_radix(n)
             }
             _ => Ok(())
         }
     }
 
-    fn set_input_radix(&mut self, radix: T) -> Result<(), VMError> {
-        if radix != T::from(10) {
+    fn set_input_radix(&mut self, radix: BigDecimal) -> Result<(), VMError> {
+        if radix != BigDecimal::from(10) {
             return Err(VMError::InvalidInputRadix);
         }
         self.input_radix = 10;
         return Ok(());
     }
 
-    fn set_output_radix(&mut self, radix: T) -> Result<(), VMError> {
-        if radix != T::from(10) {
+    fn set_output_radix(&mut self, radix: BigDecimal) -> Result<(), VMError> {
+        if radix != BigDecimal::from(10) {
             return Err(VMError::InvalidOutputRadix);
         }
         self.output_radix = 10;
         return Ok(());
     }
 
-    fn set_precision(&mut self, precision: T) -> Result<(), VMError> {
-        self.precision = T::into(precision);
-        return Ok(());
+    fn set_precision(&mut self, precision: BigDecimal) -> Result<(), VMError> {
+        if let Some(value) = precision.to_u64() {
+            self.precision = value;
+            return Ok(())
+        }
+        Err(VMError::InvalidPrecision)
     }
 }
 
 #[test]
 fn test_input_radix() {
-    let mut vm = VM::<u64>::new();
-    assert!(vm.set_input_radix(10).is_ok());
+    let mut vm = VM::new();
+    assert!(vm.set_input_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_input_radix_fail() {
-    let mut vm = VM::<u64>::new();
-    assert!(vm.set_input_radix(50).is_err());
+    let mut vm = VM::new();
+    assert!(vm.set_input_radix(BigDecimal::from(50)).is_err());
 }
 
 #[test]
 fn test_output_radix() {
-    let mut vm = VM::<u64>::new();
-    assert!(vm.set_output_radix(10).is_ok());
+    let mut vm = VM::new();
+    assert!(vm.set_output_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_output_radix_fail() {
-    let mut vm = VM::<u64>::new();
-    assert!(vm.set_output_radix(50).is_err());
+    let mut vm = VM::new();
+    assert!(vm.set_output_radix(BigDecimal::from(50)).is_err());
 }
 
 #[test]
 fn test_precision() {
-    let mut vm = VM::<u64>::new();
-    assert!(vm.set_precision(10).is_ok());
+    let mut vm = VM::new();
+    assert!(vm.set_precision(BigDecimal::from(10)).is_ok());
 }

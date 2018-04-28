@@ -1,4 +1,6 @@
 extern crate num;
+extern crate num_bigint;
+extern crate bigdecimal;
 
 use std::io::Write;
 use std::path::Path;
@@ -35,7 +37,7 @@ impl ProgramSource {
 fn main() {
     // let us implement the real app to understand approaches to ownership
 
-    let mut vm = vm::VM::<u64>::new();
+    let mut vm = vm::VM::new();
 
     let mut args = std::env::args().skip(1);
 
