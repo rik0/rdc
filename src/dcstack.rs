@@ -16,11 +16,13 @@ impl<'a, T: num::Num> MemoryCell<'a, T> {
             &MemoryCell::Str(..) => false,
         }
     }
-
-    // fn num() .. how can it work? sometimes the area would be consumed, sometimes it would not.
-    // hey use ref!
 }
 
+#[test]
+fn test_is_num() {
+    assert!(MemoryCell::Num(3).is_num());
+    assert!(!MemoryCell::Str::<u64>("a".as_bytes()).is_num());
+}
 
 
 #[derive(Clone, Debug, Copy, PartialEq)]
