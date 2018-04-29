@@ -55,8 +55,8 @@ impl From<dcstack::DCError> for VMError {
     }
 }
 
-pub struct VM<'a> {
-    stack: dcstack::DCStack<'a>,
+pub struct VM {
+    stack: dcstack::DCStack,
     input_radix: u32,  // [2,16]
     output_radix: u32, // >= 2
     precision: u64,   // > 0, always in decimal
@@ -64,9 +64,9 @@ pub struct VM<'a> {
 
 
 
-impl<'a> VM<'a> 
+impl<'a> VM
 {
-    pub fn new() -> VM<'a> {
+    pub fn new() -> VM {
         VM {
             stack: dcstack::DCStack::new(),
             input_radix: 10,
@@ -90,7 +90,7 @@ impl<'a> VM<'a>
                 Ok(())
             }
             &Instruction::Str(text) => {
-                // self.stack.push_str(text);
+                self.stack.push_str(text);
                 Ok(())
             }
             &Instruction:: SetInputRadix => {

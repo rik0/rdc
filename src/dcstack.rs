@@ -10,12 +10,12 @@ use bigdecimal;
 use bigdecimal::BigDecimal;
 
 #[derive(Clone, Debug, PartialEq)]
-enum MemoryCell<'a> {
-    Str(&'a [u8]),
+enum MemoryCell {
+    Str(Vec<u8>),
     Num(BigDecimal)
 }
 
-impl<'a> MemoryCell<'a> {
+impl MemoryCell {
     fn is_num(&self) -> bool {
         match self {
             &MemoryCell::Num(..) => true,
@@ -24,9 +24,9 @@ impl<'a> MemoryCell<'a> {
     }
 }
 
-impl<'a, T> From<T> for MemoryCell<'a> 
+impl<'a, T> From<T> for MemoryCell 
     where bigdecimal::BigDecimal: From<T> {
-    fn from(n: T) -> MemoryCell<'a> {
+    fn from(n: T) -> MemoryCell {
         MemoryCell::Num(BigDecimal::from(n))
     }
 }
@@ -34,7 +34,7 @@ impl<'a, T> From<T> for MemoryCell<'a>
 #[test]
 fn test_is_num() {
     assert!(MemoryCell::from(3).is_num());
-    assert!(!MemoryCell::Str("a".as_bytes()).is_num());
+    assert!(!MemoryCell::Str(Vec::from("a")).is_num());
 }
 
 
@@ -73,8 +73,8 @@ impl error::Error for DCError {
 }
 
 #[derive(Debug)]
-pub struct DCStack<'a> { 
-    stack: Vec<MemoryCell<'a>>,
+pub struct DCStack { 
+    stack: Vec<MemoryCell>,
 } 
 
 macro_rules! dcstack {
@@ -85,8 +85,8 @@ macro_rules! dcstack {
     })
 }
 
-impl<'a> DCStack<'a> {
-    pub fn new() -> DCStack<'a> {
+impl DCStack {
+    pub fn new() -> DCStack {
         DCStack{stack: Vec::new()}
     }
 
@@ -111,11 +111,11 @@ impl<'a> DCStack<'a> {
         Err(DCError::NumParseError)
     }
 
-    pub fn push_str(&mut self, item: &'a [u8]) {
-        self.push(MemoryCell::Str(item))
+    pub fn push_str(&mut self, item: &[u8]) {
+        self.push(MemoryCell::Str(Vec::from(item)))
     }
 
-    fn push(&mut self, item: MemoryCell<'a>) {
+    fn push(&mut self, item: MemoryCell) {
         self.stack.push(item)
     }
 

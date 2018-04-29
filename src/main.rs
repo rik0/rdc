@@ -70,7 +70,6 @@ fn main() {
         match program_source.into_bytes(&mut source_code) {
             Ok(bytes) => match parse::parse(&source_code[..bytes]) {
                 Err(parse_error) => {
-                    // TODO I should use a description
                     eprintln!("parse error {}", parse_error);
                 }
                 Ok(instructions) => {
