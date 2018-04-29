@@ -1,7 +1,7 @@
 
 use std::fmt;
 use std::error;
-use std::convert::{From, Into};
+use std::convert::From;
 
 use bigdecimal::BigDecimal;
 
@@ -84,6 +84,15 @@ impl<'a> VM<'a>
 
     fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
         match instruction {
+            &Instruction::Nop => Ok(()),
+            &Instruction::Num(text) => {
+                self.stack.push_bytes_as_num(text, self.input_radix)?;
+                Ok(())
+            }
+            &Instruction::Str(text) => {
+                // self.stack.push_str(text);
+                Ok(())
+            }
             &Instruction:: SetInputRadix => {
                 let n : BigDecimal = self.stack.pop_num()?;
                 self.set_input_radix(n)
@@ -98,6 +107,14 @@ impl<'a> VM<'a>
             }
             &Instruction::GetOutputRadix => {
                 self.stack.push_num(self.output_radix);
+                Ok(())
+            }
+            &Instruction::SetPrecision => {
+                let n : BigDecimal = self.stack.pop_num()?;
+                self.set_precision(n)
+            }
+            &Instruction::GetPrecision => {
+                self.stack.push_num(self.precision);
                 Ok(())
             }
             _ => Ok(())
