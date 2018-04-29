@@ -3,6 +3,7 @@ use std::fmt;
 use std::error;
 use std::error::Error;
 use std::convert::From;
+use std::ops::*;
 use std::io::prelude::*;
 
 use bigdecimal::BigDecimal;
@@ -132,6 +133,8 @@ impl<'a> VM<'a> {
             }
             &Instruction::Add => {
                 let tos = self.stack.pop_num()?;
+                // TODO might be a bug, stack should not be popped
+                // might be easier to make prechecks...
                 Ok(())
             }
             &Instruction::SetInputRadix => {

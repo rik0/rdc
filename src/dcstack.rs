@@ -18,6 +18,13 @@ impl MemoryCell {
             &MemoryCell::Str(..) => false,
         }
     }
+
+    pub fn num(self) -> Option<BigDecimal> {
+        match self {
+            MemoryCell::Str(..) => None,
+            MemoryCell::Num(n) => Some(n),
+        }
+    }
 }
 
 impl<'a, T> From<T> for MemoryCell
@@ -107,6 +114,27 @@ impl DCStack {
             return Ok(());
         }
         Err(DCError::NumParseError)
+    }
+
+    pub fn apply_and_consume_tos<F>(&mut self, f: F) -> Result<(), DCError>
+    where
+        F: Fn(BigDecimal, BigDecimal) -> BigDecimal,
+    {
+        let len = self.len();
+
+        if len < 2 {
+            return Err(DCError::StackEmpty);
+        }
+
+        if !self.stack[len - 1].is_num() || !self.stack[len - 2].is_num() {
+            return Err(DCError::NonNumericValue);
+        }
+
+        let tos = self.pop_num().unwrap();
+        let second = self.pop_num().unwrap();
+        self.stack[len - 2] = MemoryCell::Num(f(tos, second));
+
+        Ok(())
     }
 
     pub fn push_str(&mut self, item: &[u8]) {
