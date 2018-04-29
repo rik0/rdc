@@ -2,10 +2,10 @@
 use std::fmt;
 use std::error;
 use std::convert::From;
+use std::io::prelude::*;
 
 use bigdecimal::BigDecimal;
 
-use num;
 use num::ToPrimitive;
 
 use dcstack;
@@ -55,23 +55,25 @@ impl From<dcstack::DCError> for VMError {
     }
 }
 
-pub struct VM {
+pub struct VM<'a> {
     stack: dcstack::DCStack,
     input_radix: u32,  // [2,16]
     output_radix: u32, // >= 2
     precision: u64,   // > 0, always in decimal
+    sink: &'a mut Write,
 }
 
 
 
-impl<'a> VM
+impl <'a> VM<'a>
 {
-    pub fn new() -> VM {
+    pub fn new(w: &mut Write) -> VM {
         VM {
             stack: dcstack::DCStack::new(),
             input_radix: 10,
             output_radix: 10,
             precision: 0,
+            sink: w,
         }
     }
 
@@ -148,30 +150,35 @@ impl<'a> VM
 
 #[test]
 fn test_input_radix() {
-    let mut vm = VM::new();
+    let mut buffer = Vec::new();
+    let mut vm = VM::new(&mut buffer);
     assert!(vm.set_input_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_input_radix_fail() {
-    let mut vm = VM::new();
+    let mut buffer = Vec::new();
+    let mut vm = VM::new(&mut buffer);
     assert!(vm.set_input_radix(BigDecimal::from(50)).is_err());
 }
 
 #[test]
 fn test_output_radix() {
-    let mut vm = VM::new();
+    let mut buffer = Vec::new();
+    let mut vm = VM::new(&mut buffer);
     assert!(vm.set_output_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_output_radix_fail() {
-    let mut vm = VM::new();
+    let mut buffer = Vec::new();
+    let mut vm = VM::new(&mut buffer);
     assert!(vm.set_output_radix(BigDecimal::from(50)).is_err());
 }
 
 #[test]
 fn test_precision() {
-    let mut vm = VM::new();
+    let mut buffer = Vec::new();
+    let mut vm = VM::new(&mut buffer);
     assert!(vm.set_precision(BigDecimal::from(10)).is_ok());
 }

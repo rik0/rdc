@@ -64,7 +64,8 @@ fn main() {
     {
         // TODO probably it is a bit better to copy some stuff in the stack that should 
         // own all the data that gets in...
-    let mut vm = vm::VM::new();
+    let mut stdout = std::io::stdout();
+    let mut vm = vm::VM::new(&mut stdout);
     for program_source in program_sources {
         let mut source_code = Vec::new();
         match program_source.into_bytes(&mut source_code) {
