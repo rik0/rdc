@@ -68,19 +68,8 @@ fn main() {
         let mut vm = vm::VM::new(&mut stdout, &mut stderr);
         for program_source in program_sources {
             let mut source_code = Vec::new();
-            match program_source.into_bytes(&mut source_code) {
-                Ok(bytes) => match parse::parse(&source_code[..bytes]) {
-                    Err(parse_error) => eprintln!("parse error {}", parse_error),
-                    Ok(instructions) => {
-                        if let Err(ioerror) = vm.eval(&instructions[..]) {
-                            eprintln!("ioerror: {}", ioerror)
-                        }
-                    }
-                },
-                Err(error) => {
-                    eprintln!("error processing file {}", error);
-                }
-            }
+            program_source.into_bytes(&mut source_code);
+            vm.execute(&source_code);
         }
     }
 }

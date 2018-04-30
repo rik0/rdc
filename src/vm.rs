@@ -370,3 +370,8 @@ fn test_add_other_not_num() {
     }
     assert!(vm.stack.len() == 2);
 }
+
+#[test]
+fn test_exec() {
+    let mut _vm = empty_test_vm!();
+}
