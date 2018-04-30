@@ -24,12 +24,12 @@ impl MemoryCell {
         MemoryCell::Str(Vec::from(s))
     }
 
-    pub fn as_bytes(&self) -> Option<&[u8]> {
-        match self {
-            &MemoryCell::Num(..) => None,
-            &MemoryCell::Str(ref s) => Some(s),
-        }
-    }
+    // pub fn as_bytes(&self) -> Option<&[u8]> {
+    //     match self {
+    //         &MemoryCell::Num(..) => None,
+    //         &MemoryCell::Str(ref s) => Some(s),
+    //     }
+    // }
 
     // pub fn num(self) -> Option<BigDecimal> {
     //     match self {
@@ -75,10 +75,12 @@ fn test_is_num() {
 pub enum DCError {
     StackEmpty,
     NonNumericValue,
+    NonStringValue,
     NumParseError,
 }
 static STACK_EMPTY: &'static str = "stack empty";
 static NON_NUMERIC_VALUE: &'static str = "non numeric value";
+static NON_STRING_VALUE: &'static str = "non string value";
 static NUM_PARSE_ERROR: &'static str = "bytes do not represent a number";
 
 impl DCError {
@@ -86,6 +88,7 @@ impl DCError {
         match self {
             &DCError::StackEmpty => &STACK_EMPTY,
             &DCError::NonNumericValue => &NON_NUMERIC_VALUE,
+            &DCError::NonStringValue => &NON_STRING_VALUE,
             &DCError::NumParseError => &NUM_PARSE_ERROR,
         }
     }
@@ -216,13 +219,23 @@ impl DCStack {
         }
     }
 
-    pub fn peek(&self) -> Result<&MemoryCell, DCError> {
-        if self.len() > 0 {
-            Ok(&self.stack[self.len() - 1])
-        } else {
-            Err(DCError::StackEmpty)
+    pub fn pop_str(&mut self) -> Result<Vec<u8>, DCError> {
+        match self.pop()? {
+            MemoryCell::Num(n) => {
+                self.stack.push(MemoryCell::Num(n));
+                Err(DCError::NonStringValue)
+            }
+            MemoryCell::Str(s) => Ok(s),
         }
     }
+
+    // pub fn peek(&self) -> Result<&MemoryCell, DCError> {
+    //     if self.len() > 0 {
+    //         Ok(&self.stack[self.len() - 1])
+    //     } else {
+    //         Err(DCError::StackEmpty)
+    //     }
+    // }
 
     pub fn peek_mut(&mut self) -> Result<&mut MemoryCell, DCError> {
         let len = self.len();
@@ -233,15 +246,15 @@ impl DCStack {
         }
     }
 
-    pub fn appy_num<F, T>(&mut self, f: F) -> Result<T, DCError>
-    where
-        F: Fn(&mut BigDecimal) -> T,
-    {
-        match self.peek_mut()? {
-            &mut MemoryCell::Num(ref mut n) => Ok(f(n)),
-            &mut MemoryCell::Str(..) => Err(DCError::NonNumericValue),
-        }
-    }
+    // pub fn appy_num<F, T>(&mut self, f: F) -> Result<T, DCError>
+    // where
+    //     F: Fn(&mut BigDecimal) -> T,
+    // {
+    //     match self.peek_mut()? {
+    //         &mut MemoryCell::Num(ref mut n) => Ok(f(n)),
+    //         &mut MemoryCell::Str(..) => Err(DCError::NonNumericValue),
+    //     }
+    // }
 
     pub fn clone_tos(&self) -> Result<MemoryCell, DCError> {
         if self.len() > 0 {

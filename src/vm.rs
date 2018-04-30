@@ -123,14 +123,6 @@ impl<'a, 'b> VM<'a, 'b> {
         Ok(())
     }
 
-    fn handle_result(&mut self, error: Result<(), VMError>) -> Result<(), io::Error> {
-        match error {
-            Err(VMError::IoError(ioerror)) => return Err(ioerror),
-            Err(error) => writeln!(self.error_sink, "dc: {}", error),
-            Ok(..) => Ok(()),
-        }
-    }
-
     pub fn execute(&mut self, program_text: &[u8]) -> Result<(), VMError> {
         let instructions = parse::parse(program_text)?;
         Ok(self.eval(&instructions)?)
@@ -217,8 +209,8 @@ impl<'a, 'b> VM<'a, 'b> {
             // string
             &Instruction::OpToString => Err(VMError::NotImplemented),
             &Instruction::ExecuteTos => {
-                let bytes = self.stack.peek()?.as_bytes().unwrap_or(return Ok(()));
-                self.execute(bytes)
+                let bytes = self.stack.pop_str()?;
+                self.execute(&bytes)
             }
             &Instruction::ExecuteInput => Err(VMError::NotImplemented),
             &Instruction::ReturnN => Err(VMError::NotImplemented),
