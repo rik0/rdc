@@ -1,4 +1,3 @@
-use std::io;
 use std::fmt;
 use std::error;
 use std::error::Error;
@@ -80,6 +79,12 @@ pub struct VM<'a> {
     sink: &'a mut Write,
 }
 
+macro_rules! bin_op {
+    ($dcstack:expr; $e: expr) => ({
+       Ok($dcstack.binary_apply_and_consume_tos($e)?)
+    });
+}
+
 impl<'a> VM<'a> {
     pub fn new(w: &mut Write) -> VM {
         VM {
@@ -101,8 +106,9 @@ impl<'a> VM<'a> {
     fn print(&mut self, element: dcstack::MemoryCell) -> Result<(), VMError> {
         match element {
             dcstack::MemoryCell::Num(n) => {
-                let (bigint, exp) = n.into_bigint_and_exponent();
+                let (bigint, _exp) = n.into_bigint_and_exponent();
                 let s = bigint.to_str_radix(self.output_radix);
+                // TODO ignoring exp means we are not printing the .
                 writeln!(self.sink, "{}", s)?;
             }
             dcstack::MemoryCell::Str(s) => {
@@ -131,15 +137,8 @@ impl<'a> VM<'a> {
                 let tos = self.stack.pop()?;
                 self.print(tos)
             }
-            &Instruction::Add => {
-                self.stack.apply_and_consume_tos(move |mut dest, tos| {
-                    dest += tos;
-                    dest
-                })?;
-                Ok(())
-                // TODO might be a bug, stack should not be popped
-                // might be easier to make prechecks...
-            }
+            &Instruction::Add => bin_op![self.stack; BigDecimal::add_assign],
+            &Instruction::Sub => bin_op![self.stack; BigDecimal::sub_assign],
             &Instruction::SetInputRadix => {
                 let n: BigDecimal = self.stack.pop_num()?;
                 self.set_input_radix(n)

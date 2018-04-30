@@ -1,6 +1,5 @@
 use fmt;
 use std::error;
-use std::str::FromStr;
 
 use bigdecimal;
 use bigdecimal::BigDecimal;
@@ -20,17 +19,17 @@ impl MemoryCell {
         }
     }
 
-    pub fn num(self) -> Option<BigDecimal> {
-        match self {
-            MemoryCell::Str(..) => None,
-            MemoryCell::Num(n) => Some(n),
-        }
-    }
+    // pub fn num(self) -> Option<BigDecimal> {
+    //     match self {
+    //         MemoryCell::Str(..) => None,
+    //         MemoryCell::Num(n) => Some(n),
+    //     }
+    // }
 }
 
 impl AddAssign for MemoryCell {
-    fn add_assign(&mut self, RHS: MemoryCell) {
-        if let MemoryCell::Num(ref rhs) = RHS {
+    fn add_assign(&mut self, rhs: MemoryCell) {
+        if let MemoryCell::Num(ref rhs) = rhs {
             if let &mut MemoryCell::Num(ref mut lhs) = self {
                 lhs.add_assign(rhs);
             }
@@ -127,12 +126,17 @@ impl DCStack {
         Err(DCError::NumParseError)
     }
 
-    pub fn apply_and_consume_tos<F>(&mut self, f: F) -> Result<(), DCError>
+    pub fn binary_apply_and_consume_tos<F>(&mut self, f: F) -> Result<(), DCError>
     where
-        F: Fn(BigDecimal, BigDecimal) -> BigDecimal,
+        F: Fn(&mut BigDecimal, BigDecimal),
     {
         let len = self.len();
 
+        // we do prechecks here because dc does not consume the stack if there
+        // are going to be issues of any kind:
+        // $ dc -e '10 +f'
+        // dc: stack empty
+        // 10
         if len < 2 {
             return Err(DCError::StackEmpty);
         }
@@ -141,11 +145,17 @@ impl DCStack {
             return Err(DCError::NonNumericValue);
         }
 
-        let tos = self.pop_num().unwrap();
-        let second = self.pop_num().unwrap();
-        self.stack.push(MemoryCell::Num(f(tos, second)));
-
-        Ok(())
+        let rhs = self.pop().unwrap();
+        if let MemoryCell::Num(rhs) = rhs {
+            if let &mut MemoryCell::Num(ref mut lhs) = self.peek_mut()? {
+                f(lhs, rhs);
+                Ok(())
+            } else {
+                Err(DCError::NonNumericValue)
+            }
+        } else {
+            Err(DCError::NonNumericValue)
+        }
     }
 
     pub fn push_str(&mut self, item: &[u8]) {
@@ -175,13 +185,13 @@ impl DCStack {
         }
     }
 
-    pub fn peek(&self) -> Result<&MemoryCell, DCError> {
-        if self.len() > 0 {
-            Ok(&self.stack[self.len() - 1])
-        } else {
-            Err(DCError::StackEmpty)
-        }
-    }
+    // pub fn peek(&self) -> Result<&MemoryCell, DCError> {
+    //     if self.len() > 0 {
+    //         Ok(&self.stack[self.len() - 1])
+    //     } else {
+    //         Err(DCError::StackEmpty)
+    //     }
+    // }
 
     pub fn peek_mut(&mut self) -> Result<&mut MemoryCell, DCError> {
         let len = self.len();
@@ -226,6 +236,7 @@ fn test_stack_pop_num_num() {
 
 #[test]
 fn test_push_pop() {
+    use std::str::FromStr;
     let mut s: DCStack = DCStack::new();
     s.push_num(10.22);
     let bd = s.pop_num().expect("was expecting to get a number");
