@@ -24,6 +24,13 @@ impl MemoryCell {
         MemoryCell::Str(Vec::from(s))
     }
 
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            &MemoryCell::Num(..) => None,
+            &MemoryCell::Str(ref s) => Some(s),
+        }
+    }
+
     // pub fn num(self) -> Option<BigDecimal> {
     //     match self {
     //         MemoryCell::Str(..) => None,
@@ -209,13 +216,13 @@ impl DCStack {
         }
     }
 
-    // pub fn peek(&self) -> Result<&MemoryCell, DCError> {
-    //     if self.len() > 0 {
-    //         Ok(&self.stack[self.len() - 1])
-    //     } else {
-    //         Err(DCError::StackEmpty)
-    //     }
-    // }
+    pub fn peek(&self) -> Result<&MemoryCell, DCError> {
+        if self.len() > 0 {
+            Ok(&self.stack[self.len() - 1])
+        } else {
+            Err(DCError::StackEmpty)
+        }
+    }
 
     pub fn peek_mut(&mut self) -> Result<&mut MemoryCell, DCError> {
         let len = self.len();
