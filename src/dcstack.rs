@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use bigdecimal;
 use bigdecimal::BigDecimal;
+use std::ops::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemoryCell {
@@ -23,6 +24,16 @@ impl MemoryCell {
         match self {
             MemoryCell::Str(..) => None,
             MemoryCell::Num(n) => Some(n),
+        }
+    }
+}
+
+impl AddAssign for MemoryCell {
+    fn add_assign(&mut self, RHS: MemoryCell) {
+        if let MemoryCell::Num(ref rhs) = RHS {
+            if let &mut MemoryCell::Num(ref mut lhs) = self {
+                lhs.add_assign(rhs);
+            }
         }
     }
 }
@@ -132,7 +143,7 @@ impl DCStack {
 
         let tos = self.pop_num().unwrap();
         let second = self.pop_num().unwrap();
-        self.stack[len - 2] = MemoryCell::Num(f(tos, second));
+        self.stack.push(MemoryCell::Num(f(tos, second)));
 
         Ok(())
     }

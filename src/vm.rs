@@ -132,10 +132,13 @@ impl<'a> VM<'a> {
                 self.print(tos)
             }
             &Instruction::Add => {
-                let tos = self.stack.pop_num()?;
+                self.stack.apply_and_consume_tos(move |mut dest, tos| {
+                    dest += tos;
+                    dest
+                })?;
+                Ok(())
                 // TODO might be a bug, stack should not be popped
                 // might be easier to make prechecks...
-                Ok(())
             }
             &Instruction::SetInputRadix => {
                 let n: BigDecimal = self.stack.pop_num()?;
