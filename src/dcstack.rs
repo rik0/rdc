@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use bigdecimal;
 use bigdecimal::BigDecimal;
+use num::bigint;
 use std::ops::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -152,9 +153,17 @@ impl DCStack {
         self.push(MemoryCell::from(item))
     }
 
-    pub fn push_bytes_as_num(&mut self, b: &[u8], radix: u32) -> Result<(), DCError> {
-        if let Some(n) = BigDecimal::parse_bytes(b, radix) {
-            self.push(MemoryCell::from(n));
+    pub fn push_bytes_as_num(
+        &mut self,
+        integer: &[u8],
+        fraction: &[u8],
+        radix: u32,
+    ) -> Result<(), DCError> {
+        println!("slice {:?}", integer);
+        let mut v = Vec::from(integer);
+        v.extend(fraction);
+        if let Some(n) = bigint::BigInt::parse_bytes(&v, radix) {
+            self.push(MemoryCell::from(BigDecimal::new(n, 0)));
             return Ok(());
         }
         Err(DCError::NumParseError)
@@ -288,4 +297,12 @@ fn test_push_pop() {
     s.push_num(10.22);
     let bd = s.pop_num().expect("was expecting to get a number");
     assert_eq!(BigDecimal::from_str("10.22").expect("was a number"), bd);
+}
+
+#[test]
+fn test_behavior() {
+    let n = bigint::BigInt::parse_bytes(b"A", 16).expect("BigInt expecting success");
+    let n = BigDecimal::parse_bytes(b"A", 16).expect("BigDecimal expecting success");
+    println!("{:?}", n);
+    assert_eq!(n, BigDecimal::from(10));
 }

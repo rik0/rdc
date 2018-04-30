@@ -20,7 +20,7 @@ pub enum RegisterOperationType {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Instruction<'a> {
     Nop,
-    Num(&'a [u8]),
+    Num(&'a [u8], &'a [u8]),
     Str(&'a [u8]),
     // print
     PrintLN,

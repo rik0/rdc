@@ -73,7 +73,7 @@ enum ParserState {
     Num {
         start: usize,
         end: usize,
-        seen_dot: bool,
+        dot_position: Option<usize>,
     },
     PrepareToReadUntil {
         terminator: Terminator,
@@ -138,9 +138,13 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 ParserState::Num {
                     start,
                     end,
-                    seen_dot: _,
+                    dot_position,
                 } => {
-                    instructions.push(Instruction::Num(&program_text[start..end]));
+                    let pos = dot_position.unwrap_or(end);
+                    instructions.push(Instruction::Num(
+                        &program_text[start..pos],
+                        &program_text[::std::cmp::min(pos + 1, end)..end],
+                    ));
                     Ok(instructions)
                 }
                 ParserState::Register(_) => Err(ParserError {
@@ -192,17 +196,17 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
             (ParserState::TopLevel, b'.') => incrementing![position; ParserState::Num {
                     start: position,
                     end: position + 1,
-                    seen_dot: true,
+                    dot_position: Some(position),
             }],
             (ParserState::TopLevel, b'0'...b'9') => incrementing![position; ParserState::Num {
                     start: position,
                     end: position + 1,
-                    seen_dot: false,
+                    dot_position: None,
             }],
             (ParserState::TopLevel, b'A'...b'F') => incrementing![position; ParserState::Num {
                     start: position,
                     end: position + 1,
-                    seen_dot: false,
+                    dot_position: None,
             }],
             (ParserState::TopLevel, b'p') => {
                 incrementing![position; push_and_toplevel![instructions; Instruction::PrintLN]]
@@ -337,38 +341,43 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 ParserState::Num {
                     start,
                     end,
-                    seen_dot: false,
+                    dot_position: None,
                 },
                 b'.',
-            ) => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: true }],
+            ) => {
+                incrementing![position; ParserState::Num{start, end: end + 1, dot_position: Some(position) }]
+            }
             (
                 ParserState::Num {
                     start,
                     end,
-                    seen_dot,
+                    dot_position,
                 },
                 b'0'...b'9',
             ) => {
-                incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: seen_dot }]
+                incrementing![position; ParserState::Num{start, end: end + 1, dot_position: dot_position }]
             }
             (
                 ParserState::Num {
                     start,
                     end,
-                    seen_dot,
+                    dot_position,
                 },
                 b'A'...b'F',
             ) => {
-                incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: seen_dot }]
+                incrementing![position; ParserState::Num{start, end: end + 1, dot_position: dot_position }]
             }
             (
                 ParserState::Num {
                     start,
                     end,
-                    seen_dot: _seen_dot,
+                    dot_position,
                 },
                 _,
-            ) => push_and_toplevel![instructions; Instruction::Num(&program_text[start..end])],
+            ) => {
+                let dot_pos = dot_position.unwrap_or(end);
+                push_and_toplevel![instructions; Instruction::Num(&program_text[start..dot_pos], &program_text[::std::cmp::min(dot_pos+1, end)..end])]
+            }
             (ParserState::Register(register_operation_type), ch) => incrementing![
                 position; 
                 push_and_toplevel![ instructions; Instruction::RegisterOperation(register_operation_type, ch)]],
@@ -484,22 +493,22 @@ parse_tests! {
     parse_test_i2: ("I", Ok(vec![Instruction::GetInputRadix])),
     parse_test_o2: ("O", Ok(vec![Instruction::GetOutputRadix])),
     parse_test_k2: ("K", Ok(vec![Instruction::GetPrecision])),
-    parse_test_0: ("0", Ok(vec![Instruction::Num("0".as_bytes())])),
-    parse_test_0dot: ("0.", Ok(vec![Instruction::Num("0.".as_bytes())])),
-    parse_test_dot0: (".0", Ok(vec![Instruction::Num(".0".as_bytes())])),
-    parse_test_132763: ("132763", Ok(vec![Instruction::Num("132763".as_bytes())])),
-    parse_test_1: ("1", Ok(vec![Instruction::Num("1".as_bytes())])),
-    parse_test_1dot: ("1.", Ok(vec![Instruction::Num("1.".as_bytes())])),
-    parse_test_dot1: (".1", Ok(vec![Instruction::Num(".1".as_bytes())])),
-    parse_test_dot: (".", Ok(vec![Instruction::Num(".".as_bytes())])),
-    parse_test_dotdot: ("..", Ok(vec![Instruction::Num(".".as_bytes()), Instruction::Num(".".as_bytes())])),
-    parse_test_dot_dot: (". .", Ok(vec![Instruction::Num(".".as_bytes()), Instruction::Num(".".as_bytes())])),
-    parse_test_zero_dot_zero: ("0.0", Ok(vec![Instruction::Num("0.0".as_bytes())])),
-    parse_test_00: ("00", Ok(vec![Instruction::Num("00".as_bytes())])),
-    parse_test_11: ("11", Ok(vec![Instruction::Num("11".as_bytes())])),
-    parse_test_a2_dot_1: ("A.1", Ok(vec![Instruction::Num("A.1".as_bytes())])),
-    parse_test_0_0: ("0 0", Ok(vec![Instruction::Num("0".as_bytes()), Instruction::Num("0".as_bytes())])),
-    parse_test_1_1: ("1 1", Ok(vec![Instruction::Num("1".as_bytes()), Instruction::Num("1".as_bytes())])),
+    parse_test_0: ("0", Ok(vec![Instruction::Num("0".as_bytes(), "".as_bytes())])),
+    parse_test_0dot: ("0.", Ok(vec![Instruction::Num("0".as_bytes(), "".as_bytes())])),
+    parse_test_dot0: (".0", Ok(vec![Instruction::Num("".as_bytes(), "0".as_bytes())])),
+    parse_test_132763: ("132763", Ok(vec![Instruction::Num("132763".as_bytes(), "".as_bytes())])),
+    parse_test_1: ("1", Ok(vec![Instruction::Num("1".as_bytes(), "".as_bytes())])),
+    parse_test_1dot: ("1.", Ok(vec![Instruction::Num("1".as_bytes(), "".as_bytes())])),
+    parse_test_dot1: (".1", Ok(vec![Instruction::Num("".as_bytes(), "1".as_bytes())])),
+    parse_test_dot: (".", Ok(vec![Instruction::Num("".as_bytes(), "".as_bytes())])),
+    parse_test_dotdot: ("..", Ok(vec![Instruction::Num("".as_bytes(), "".as_bytes()), Instruction::Num("".as_bytes(), "".as_bytes())])),
+    parse_test_dot_dot: (". .", Ok(vec![Instruction::Num("".as_bytes(), "".as_bytes()), Instruction::Num("".as_bytes(), "".as_bytes())])),
+    parse_test_zero_dot_zero: ("0.0", Ok(vec![Instruction::Num("0".as_bytes(), "0".as_bytes())])),
+    parse_test_00: ("00", Ok(vec![Instruction::Num("00".as_bytes(), "".as_bytes())])),
+    parse_test_11: ("11", Ok(vec![Instruction::Num("11".as_bytes(), "".as_bytes())])),
+    parse_test_a2_dot_1: ("A.1", Ok(vec![Instruction::Num("A".as_bytes(), "1".as_bytes())])),
+    parse_test_0_0: ("0 0", Ok(vec![Instruction::Num("0".as_bytes(), "".as_bytes()), Instruction::Num("0".as_bytes(), "".as_bytes())])),
+    parse_test_1_1: ("1 1", Ok(vec![Instruction::Num("1".as_bytes(), "".as_bytes()), Instruction::Num("1".as_bytes(), "".as_bytes())])),
     parse_test_la: ("la", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::Load, b'a' as Register)])),
     parse_test_sa: ("sa", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::Store, b'a' as Register)])),
     parse_test_l2a: ("La", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::LoadStack, b'a' as Register)])),
@@ -511,9 +520,9 @@ parse_tests! {
     parse_test_gea: ("!>a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosGeExecute, b'a' as Register)])),
     parse_test_nea: ("!=a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosNeExecute, b'a' as Register)])),
     parse_test_sysa: ("!a", Ok(vec![Instruction::System("a".as_bytes())])),
-    parse_test_sysa10: ("!a\n10", Ok(vec![Instruction::System("a".as_bytes()), Instruction::Num("10".as_bytes())])),
+    parse_test_sysa10: ("!a\n10", Ok(vec![Instruction::System("a".as_bytes()), Instruction::Num("10".as_bytes(), "".as_bytes())])),
     parse_test_ltagt: ("<>", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosLtExecute, b'>' as Register)])),
-    parse_test_str_aa3: ("[aa]3", Ok(vec![Instruction::Str("aa".as_bytes()), Instruction::Num("3".as_bytes())])),
+    parse_test_str_aa3: ("[aa]3", Ok(vec![Instruction::Str("aa".as_bytes()), Instruction::Num("3".as_bytes(), "".as_bytes())])),
     parse_test_str_aa: ("[aa]", Ok(vec![Instruction::Str("aa".as_bytes())])),
     parse_test_str_aanl: ("[aa\n]", Ok(vec![Instruction::Str("aa\n".as_bytes())])),
     parse_test_str_quoteaanl: ("[!aa\n]", Ok(vec![Instruction::Str("!aa\n".as_bytes())])),
@@ -522,8 +531,8 @@ parse_tests! {
     parse_test_z2: ("Z", Ok(vec![Instruction::Digits])),
     parse_test_x2: ("X", Ok(vec![Instruction::FractionDigits])),
     parse_test_z: ("z", Ok(vec![Instruction::StackDepth])),
-    parse_test_comment1: ("10 # foo 20", Ok(vec![Instruction::Num("10".as_bytes()), Instruction::Comment(" foo 20".as_bytes())])),
-    parse_test_comment2: ("10 # foo\n20", Ok(vec![Instruction::Num("10".as_bytes()), Instruction::Comment(" foo".as_bytes()), Instruction::Num("20".as_bytes())])),
+    parse_test_comment1: ("10 # foo 20", Ok(vec![Instruction::Num("10".as_bytes(), "".as_bytes()), Instruction::Comment(" foo 20".as_bytes())])),
+    parse_test_comment2: ("10 # foo\n20", Ok(vec![Instruction::Num("10".as_bytes(), "".as_bytes()), Instruction::Comment(" foo".as_bytes()), Instruction::Num("20".as_bytes(), "".as_bytes())])),
     parse_test_set_array: (":a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::SetArray, b'a' as Register)])),
     parse_test_get_array: (";a", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::GetArray, b'a' as Register)])),
     parse_test_input: ("?", Ok(vec![Instruction::ExecuteInput])),

@@ -146,8 +146,9 @@ impl<'a, 'b> VM<'a, 'b> {
     fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
         match instruction {
             &Instruction::Nop => Ok(()),
-            &Instruction::Num(text) => {
-                self.stack.push_bytes_as_num(text, self.input_radix)?;
+            &Instruction::Num(integer, fraction) => {
+                self.stack
+                    .push_bytes_as_num(integer, fraction, self.input_radix)?;
                 Ok(())
             }
             &Instruction::Str(text) => {
@@ -404,13 +405,12 @@ fn test_exec() {
     assert_eq!(Vec::from("1100\n"), output);
 }
 
-#[cfg(test)]
 macro_rules! test_exec {
     ($name:ident; $program:expr; $expected_output:expr) => (
         #[test]
         fn $name() {
             let mut output: Vec<u8> = Vec::new();
-            let mut err: Vec<u8> = Vec::new();
+            let mut error: Vec<u8> = Vec::new();
             {
                 let mut vm = VM {
                     stack: dcstack::DCStack::new(),
@@ -418,13 +418,14 @@ macro_rules! test_exec {
                     output_radix: 10,
                     precision: 0,
                     sink: &mut output,
-                    error_sink: &mut err,
+                    error_sink: &mut error,
                 };
-                println!("{:?}", parse::program($program));
+                println!("{:?}", parse::parse($program));
                 assert!(vm.execute($program).is_ok())
             }
 
             assert_eq!(Vec::from($expected_output), output);
+            assert_eq!(Vec::<u8>::new(), error);
         }
     )
 }
@@ -436,4 +437,6 @@ test_exec![test_p2p;b"10nzp";"10\n0\n"];
 // test_exec![test_oct;b"8o 8p";"10\n"];
 test_exec![test_input_set_get_base;b"8iIp";"8\n"];
 test_exec![test_input_hex;b"16iAp";"10\n"];
+test_exec![test_input_hex_aa;b"16iAAp";"170\n"];
+test_exec![test_input_hex_dec;b"16iA.Ap";"10.6\n"];
 // test_exec![test_input_oct;b"8i 10p";"8\n"];
