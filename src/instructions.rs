@@ -52,6 +52,7 @@ pub enum Instruction<'a> {
     GetPrecision,
     // string
     OpToString,
+    ExecuteTos,
     ExecuteInput,
     ReturnCaller,
     ReturnN,

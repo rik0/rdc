@@ -10,6 +10,7 @@ use bigdecimal::BigDecimal;
 
 use num::ToPrimitive;
 
+use parse;
 use dcstack;
 use instructions::*;
 
@@ -18,6 +19,7 @@ pub enum VMError {
     StackError(dcstack::DCError),
     FmtError(fmt::Error),
     IoError(::std::io::Error),
+    ParseError(parse::ParserError),
     InvalidInputRadix,
     InvalidOutputRadix,
     InvalidPrecision,
@@ -37,7 +39,9 @@ impl VMError {
             &VMError::InvalidPrecision => &INVALID_PRECISION,
             &VMError::NotImplemented => &NOT_IMPLEMENTED,
             &VMError::StackError(dcerror) => dcerror.message(),
-            // TODO ugly but it works
+            &VMError::ParseError(ref parse_error) => &Box::new(parse_error.description()),
+            // TODO ugly but it works: display should only be a simple message and we should
+            // do the interesting stuff in fmt, which can allocate memory more easily
             &VMError::FmtError(ref fmterror) => &Box::new(fmterror.description()),
             &VMError::IoError(ref ioerror) => &Box::new(ioerror.description()),
         }
@@ -72,6 +76,12 @@ impl From<fmt::Error> for VMError {
 impl From<::std::io::Error> for VMError {
     fn from(error: ::std::io::Error) -> VMError {
         VMError::IoError(error)
+    }
+}
+
+impl From<parse::ParserError> for VMError {
+    fn from(error: parse::ParserError) -> VMError {
+        VMError::ParseError(error)
     }
 }
 
@@ -111,6 +121,11 @@ impl<'a, 'b> VM<'a, 'b> {
             }
         }
         Ok(())
+    }
+
+    pub fn execute(&mut self, program_text: &Vec<u8>) -> Result<(), VMError> {
+        let instructions = parse::parse(program_text)?;
+        Ok(self.eval(&instructions)?)
     }
 
     fn print(&mut self, element: dcstack::MemoryCell) -> Result<(), VMError> {
@@ -193,6 +208,7 @@ impl<'a, 'b> VM<'a, 'b> {
             }
             // string
             &Instruction::OpToString => Err(VMError::NotImplemented),
+            &Instruction::ExecuteTos => Err(VMError::NotImplemented),
             &Instruction::ExecuteInput => Err(VMError::NotImplemented),
             &Instruction::ReturnN => Err(VMError::NotImplemented),
             &Instruction::ReturnCaller => Err(VMError::NotImplemented),

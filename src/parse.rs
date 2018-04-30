@@ -1,10 +1,11 @@
 use std::ops::Range;
 use fmt;
+use std::error;
 
 use instructions::*;
 
-const STRING_TERMINATOR : u8 = b']';
-const NEWLINE_BYTE : u8 = b'\n';
+const STRING_TERMINATOR: u8 = b']';
+const NEWLINE_BYTE: u8 = b'\n';
 
 #[derive(Clone, Debug, PartialEq)]
 enum Terminator {
@@ -23,26 +24,30 @@ impl PartialEq<u8> for Terminator {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum ParserErrorType {
     InvalidCharacter(u8),
     EOP(String),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParserError {
     position: usize,
     error_type: ParserErrorType,
 }
 
-// static INVALID CHARACTER_TEMPLATE: &'static str = "stack empty";
-// static EOP_TEMPLATE: &'static str = "end of string {}";
+static EOP_MESSAGE: &'static str = "end of stream";
+static INVALID_CHARACTER: &'static str = "invalid character";
 
 impl fmt::Display for ParserError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match &self.error_type {
             &ParserErrorType::InvalidCharacter(ch) => {
-                writeln!(f, "invalid character {} at position {}", ch as char, self.position)?;
+                writeln!(
+                    f,
+                    "invalid character {} at position {}",
+                    ch as char, self.position
+                )?;
             }
             &ParserErrorType::EOP(ref s) => {
                 writeln!(f, "end of program {}", s)?;
@@ -52,8 +57,16 @@ impl fmt::Display for ParserError {
     }
 }
 
+impl error::Error for ParserError {
+    fn description(&self) -> &str {
+        match &self.error_type {
+            &ParserErrorType::EOP(..) => &EOP_MESSAGE,
+            &ParserErrorType::InvalidCharacter(..) => &INVALID_CHARACTER,
+        }
+    }
+}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum ParserState {
     TopLevel,
     Error(usize, ParserErrorType),
@@ -62,13 +75,16 @@ enum ParserState {
         end: usize,
         seen_dot: bool,
     },
-    PrepareToReadUntil{terminator: Terminator},
-    ReadUntilByte{terminator: Terminator, range: Range<usize>},
+    PrepareToReadUntil {
+        terminator: Terminator,
+    },
+    ReadUntilByte {
+        terminator: Terminator,
+        range: Range<usize>,
+    },
     Register(RegisterOperationType),
     Mark,
 }
-
-
 
 macro_rules! incrementing {
     ($identifier:ident; $case:block) => ({
@@ -103,9 +119,8 @@ macro_rules! push_and_next_state {
 macro_rules! push_and_toplevel {
     ($instructions:ident; $instruction:expr) => (
         push_and_next_state![$instructions; $instruction; ParserState::TopLevel]
-    ); 
+    );
 }
-
 
 pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
     let mut state = ParserState::TopLevel;
@@ -120,39 +135,61 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                     error_type,
                 }),
                 ParserState::TopLevel => Ok(instructions),
-                ParserState::Num { start, end, seen_dot: _} => {
+                ParserState::Num {
+                    start,
+                    end,
+                    seen_dot: _,
+                } => {
                     instructions.push(Instruction::Num(&program_text[start..end]));
                     Ok(instructions)
                 }
-                ParserState::Register(_) => Err(ParserError{
-                        position,
-                        error_type: ParserErrorType::EOP("was expecting a register".to_string()),
-                    }),
+                ParserState::Register(_) => Err(ParserError {
+                    position,
+                    error_type: ParserErrorType::EOP("was expecting a register".to_string()),
+                }),
                 ParserState::Mark => Ok(instructions),
                 // dc actually seg faults in this case
-                ParserState::PrepareToReadUntil{terminator: Terminator::String} => Err(ParserError{
+                ParserState::PrepareToReadUntil {
+                    terminator: Terminator::String,
+                } => Err(ParserError {
                     position,
-                    error_type: ParserErrorType::EOP("string not completed".to_string())
+                    error_type: ParserErrorType::EOP("string not completed".to_string()),
                 }),
-                ParserState::PrepareToReadUntil{..} => Ok(instructions),
-                ParserState::ReadUntilByte{terminator: Terminator::String, range } => {
+                ParserState::PrepareToReadUntil { .. } => Ok(instructions),
+                ParserState::ReadUntilByte {
+                    terminator: Terminator::String,
+                    range,
+                } => {
                     instructions.push(Instruction::Str(&program_text[range]));
                     Ok(instructions)
                 }
-                ParserState::ReadUntilByte{terminator: Terminator::System, range } => {
+                ParserState::ReadUntilByte {
+                    terminator: Terminator::System,
+                    range,
+                } => {
                     instructions.push(Instruction::System(&program_text[range]));
                     Ok(instructions)
                 }
-                ParserState::ReadUntilByte{terminator: Terminator::Comment, range } => {
+                ParserState::ReadUntilByte {
+                    terminator: Terminator::Comment,
+                    range,
+                } => {
                     instructions.push(Instruction::Comment(&program_text[range]));
                     Ok(instructions)
                 }
-            }
+            };
         }
         state = match (state, program_text[position]) {
-            (ParserState::Error(position, error_type), _) => return Err(ParserError{position, error_type}),
-            (ParserState::TopLevel, 0) => incrementing![position; push_and_toplevel![instructions; Instruction::Nop]],
-            (ParserState::TopLevel, b'.') =>  incrementing![position; ParserState::Num {
+            (ParserState::Error(position, error_type), _) => {
+                return Err(ParserError {
+                    position,
+                    error_type,
+                })
+            }
+            (ParserState::TopLevel, 0) => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Nop]]
+            }
+            (ParserState::TopLevel, b'.') => incrementing![position; ParserState::Num {
                     start: position,
                     end: position + 1,
                     seen_dot: true,
@@ -162,72 +199,218 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                     end: position + 1,
                     seen_dot: false,
             }],
-            (ParserState::TopLevel, b'p') => incrementing![position; push_and_toplevel![instructions; Instruction::PrintLN]],
-            (ParserState::TopLevel, b'n') => incrementing![position; push_and_toplevel![instructions; Instruction::PrintPop]],
-            (ParserState::TopLevel, b'P') => incrementing![position; push_and_toplevel![instructions; Instruction::PrettyPrint]],
-            (ParserState::TopLevel, b'f') => incrementing![position; push_and_toplevel![instructions; Instruction::PrintStack]],
-            (ParserState::TopLevel, b'+') => incrementing![position; push_and_toplevel![instructions; Instruction::Add]],
-            (ParserState::TopLevel, b'-') => incrementing![position; push_and_toplevel![instructions; Instruction::Sub]],
-            (ParserState::TopLevel, b'*') => incrementing![position; push_and_toplevel![instructions; Instruction::Mul]],
-            (ParserState::TopLevel, b'/') => incrementing![position; push_and_toplevel![instructions; Instruction::Div]],
-            (ParserState::TopLevel, b'%') => incrementing![position; push_and_toplevel![instructions; Instruction::Mod]],
-            (ParserState::TopLevel, b'~') => incrementing![position; push_and_toplevel![instructions; Instruction::Divmod]],
-            (ParserState::TopLevel, b'^') => incrementing![position; push_and_toplevel![instructions; Instruction::Exp]],
-            (ParserState::TopLevel, b'|') => incrementing![position; push_and_toplevel![instructions; Instruction::Modexp]],
-            (ParserState::TopLevel, b'v') => incrementing![position; push_and_toplevel![instructions; Instruction::Sqrt]],
-            (ParserState::TopLevel, b'c') => incrementing![position; push_and_toplevel![instructions; Instruction::Clear]],
-            (ParserState::TopLevel, b'd') => incrementing![position;push_and_toplevel![instructions; Instruction::Dup]],
-            (ParserState::TopLevel, b'r') => incrementing![position;push_and_toplevel![instructions; Instruction::Swap]],
-            (ParserState::TopLevel, b's') => incrementing![position;ParserState::Register(RegisterOperationType::Store)],
-            (ParserState::TopLevel, b'l') => incrementing![position;ParserState::Register(RegisterOperationType::Load)],
-            (ParserState::TopLevel, b'S') => incrementing![position;ParserState::Register(RegisterOperationType::StoreStack)],
-            (ParserState::TopLevel, b'L') => incrementing![position;ParserState::Register(RegisterOperationType::LoadStack)],
-            (ParserState::TopLevel, b'>') => incrementing![position;ParserState::Register(RegisterOperationType::TosGtExecute)],
-            (ParserState::TopLevel, b'<') => incrementing![position;ParserState::Register(RegisterOperationType::TosLtExecute)],
-            (ParserState::TopLevel, b'=') => incrementing![position;ParserState::Register(RegisterOperationType::TosEqExecute)],
+            (ParserState::TopLevel, b'p') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::PrintLN]]
+            }
+            (ParserState::TopLevel, b'n') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::PrintPop]]
+            }
+            (ParserState::TopLevel, b'P') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::PrettyPrint]]
+            }
+            (ParserState::TopLevel, b'f') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::PrintStack]]
+            }
+            (ParserState::TopLevel, b'+') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Add]]
+            }
+            (ParserState::TopLevel, b'-') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Sub]]
+            }
+            (ParserState::TopLevel, b'*') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Mul]]
+            }
+            (ParserState::TopLevel, b'/') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Div]]
+            }
+            (ParserState::TopLevel, b'%') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Mod]]
+            }
+            (ParserState::TopLevel, b'~') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Divmod]]
+            }
+            (ParserState::TopLevel, b'^') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Exp]]
+            }
+            (ParserState::TopLevel, b'|') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Modexp]]
+            }
+            (ParserState::TopLevel, b'v') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Sqrt]]
+            }
+            (ParserState::TopLevel, b'c') => {
+                incrementing![position; push_and_toplevel![instructions; Instruction::Clear]]
+            }
+            (ParserState::TopLevel, b'd') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::Dup]]
+            }
+            (ParserState::TopLevel, b'r') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::Swap]]
+            }
+            (ParserState::TopLevel, b's') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::Store)]
+            }
+            (ParserState::TopLevel, b'l') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::Load)]
+            }
+            (ParserState::TopLevel, b'S') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::StoreStack)]
+            }
+            (ParserState::TopLevel, b'L') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::LoadStack)]
+            }
+            (ParserState::TopLevel, b'>') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::TosGtExecute)]
+            }
+            (ParserState::TopLevel, b'<') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::TosLtExecute)]
+            }
+            (ParserState::TopLevel, b'=') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::TosEqExecute)]
+            }
             (ParserState::TopLevel, b'!') => incrementing![position;ParserState::Mark],
-            (ParserState::TopLevel, b'i') => incrementing![position;push_and_toplevel![instructions; Instruction::SetInputRadix]],
-            (ParserState::TopLevel, b'o') => incrementing![position;push_and_toplevel![instructions; Instruction::SetOutputRadix]],
-            (ParserState::TopLevel, b'k') => incrementing![position;push_and_toplevel![instructions; Instruction::SetPrecision]],
-            (ParserState::TopLevel, b'I') => incrementing![position;push_and_toplevel![instructions; Instruction::GetInputRadix]],
-            (ParserState::TopLevel, b'O') => incrementing![position;push_and_toplevel![instructions; Instruction::GetOutputRadix]],
-            (ParserState::TopLevel, b'K') => incrementing![position;push_and_toplevel![instructions; Instruction::GetPrecision]],
-            (ParserState::TopLevel, b'[') => incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::String}],
-            (ParserState::TopLevel, b'a') => incrementing![position;push_and_toplevel![instructions; Instruction::OpToString]],
-            (ParserState::TopLevel, b'Z') => incrementing![position;push_and_toplevel![instructions; Instruction::Digits]],
-            (ParserState::TopLevel, b'X') => incrementing![position;push_and_toplevel![instructions; Instruction::FractionDigits]],
-            (ParserState::TopLevel, b'z') => incrementing![position;push_and_toplevel![instructions; Instruction::StackDepth]],
-            (ParserState::TopLevel, b'#') => incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::Comment}],
-            (ParserState::TopLevel, b':') => incrementing![position;ParserState::Register(RegisterOperationType::SetArray)],
-            (ParserState::TopLevel, b';') => incrementing![position;ParserState::Register(RegisterOperationType::GetArray)],
-            (ParserState::TopLevel, b'?') => incrementing![position;push_and_toplevel![instructions; Instruction::ExecuteInput]],
-            (ParserState::TopLevel, b'q') => incrementing![position;push_and_toplevel![instructions; Instruction::ReturnCaller]],
-            (ParserState::TopLevel, b'Q') => incrementing![position;push_and_toplevel![instructions; Instruction::ReturnN]],
+            (ParserState::TopLevel, b'i') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::SetInputRadix]]
+            }
+            (ParserState::TopLevel, b'o') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::SetOutputRadix]]
+            }
+            (ParserState::TopLevel, b'k') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::SetPrecision]]
+            }
+            (ParserState::TopLevel, b'I') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::GetInputRadix]]
+            }
+            (ParserState::TopLevel, b'O') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::GetOutputRadix]]
+            }
+            (ParserState::TopLevel, b'K') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::GetPrecision]]
+            }
+            (ParserState::TopLevel, b'[') => {
+                incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::String}]
+            }
+            (ParserState::TopLevel, b'a') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::OpToString]]
+            }
+            (ParserState::TopLevel, b'x') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::ExecuteTos]]
+            }
+            (ParserState::TopLevel, b'Z') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::Digits]]
+            }
+            (ParserState::TopLevel, b'X') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::FractionDigits]]
+            }
+            (ParserState::TopLevel, b'z') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::StackDepth]]
+            }
+            (ParserState::TopLevel, b'#') => {
+                incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::Comment}]
+            }
+            (ParserState::TopLevel, b':') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::SetArray)]
+            }
+            (ParserState::TopLevel, b';') => {
+                incrementing![position;ParserState::Register(RegisterOperationType::GetArray)]
+            }
+            (ParserState::TopLevel, b'?') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::ExecuteInput]]
+            }
+            (ParserState::TopLevel, b'q') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::ReturnCaller]]
+            }
+            (ParserState::TopLevel, b'Q') => {
+                incrementing![position;push_and_toplevel![instructions; Instruction::ReturnN]]
+            }
             (ParserState::TopLevel, b' ') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, b'\n') => incrementing![position; ParserState::TopLevel], // do nothing
-            (ParserState::TopLevel, ch) => ParserState::Error(position, ParserErrorType::InvalidCharacter(ch)),
-            (ParserState::Num{start, end, seen_dot: false}, b'.') => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: true }], 
-            (ParserState::Num{start, end, seen_dot}, b'0'...b'9') => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: seen_dot }], 
-            (ParserState::Num{start, end, seen_dot: _seen_dot}, _) => push_and_toplevel![instructions; Instruction::Num(&program_text[start..end])],
+            (ParserState::TopLevel, ch) => {
+                ParserState::Error(position, ParserErrorType::InvalidCharacter(ch))
+            }
+            (
+                ParserState::Num {
+                    start,
+                    end,
+                    seen_dot: false,
+                },
+                b'.',
+            ) => incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: true }],
+            (
+                ParserState::Num {
+                    start,
+                    end,
+                    seen_dot,
+                },
+                b'0'...b'9',
+            ) => {
+                incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: seen_dot }]
+            }
+            (
+                ParserState::Num {
+                    start,
+                    end,
+                    seen_dot: _seen_dot,
+                },
+                _,
+            ) => push_and_toplevel![instructions; Instruction::Num(&program_text[start..end])],
             (ParserState::Register(register_operation_type), ch) => incrementing![
                 position; 
                 push_and_toplevel![ instructions; Instruction::RegisterOperation(register_operation_type, ch)]],
-            (ParserState::Mark, b'>') => incrementing![position; ParserState::Register(RegisterOperationType::TosGeExecute)],
-            (ParserState::Mark, b'<') => incrementing![position; ParserState::Register(RegisterOperationType::TosLeExecute)],
-            (ParserState::Mark, b'=') => incrementing![position; ParserState::Register(RegisterOperationType::TosNeExecute)],
-            (ParserState::Mark, _) => incrementing![position; ParserState::ReadUntilByte { terminator: Terminator::System, range: position .. position+1 }],
-            (ParserState::PrepareToReadUntil{ref terminator}, ch) if *terminator == ch => incrementing![position; ParserState::TopLevel],
-            (ParserState::PrepareToReadUntil{terminator}, _) => incrementing![position; ParserState::ReadUntilByte{terminator, range: position..position+1}],
-            (ParserState::ReadUntilByte{terminator: Terminator::System, range: Range{start, end}}, NEWLINE_BYTE) => incrementing![
+            (ParserState::Mark, b'>') => {
+                incrementing![position; ParserState::Register(RegisterOperationType::TosGeExecute)]
+            }
+            (ParserState::Mark, b'<') => {
+                incrementing![position; ParserState::Register(RegisterOperationType::TosLeExecute)]
+            }
+            (ParserState::Mark, b'=') => {
+                incrementing![position; ParserState::Register(RegisterOperationType::TosNeExecute)]
+            }
+            (ParserState::Mark, _) => {
+                incrementing![position; ParserState::ReadUntilByte { terminator: Terminator::System, range: position .. position+1 }]
+            }
+            (ParserState::PrepareToReadUntil { ref terminator }, ch) if *terminator == ch => {
+                incrementing![position; ParserState::TopLevel]
+            }
+            (ParserState::PrepareToReadUntil { terminator }, _) => {
+                incrementing![position; ParserState::ReadUntilByte{terminator, range: position..position+1}]
+            }
+            (
+                ParserState::ReadUntilByte {
+                    terminator: Terminator::System,
+                    range: Range { start, end },
+                },
+                NEWLINE_BYTE,
+            ) => incrementing![
                 position;
-                push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])]], 
-            (ParserState::ReadUntilByte{terminator: Terminator::String , range: Range{start, end}}, STRING_TERMINATOR) => incrementing![
+                push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])]],
+            (
+                ParserState::ReadUntilByte {
+                    terminator: Terminator::String,
+                    range: Range { start, end },
+                },
+                STRING_TERMINATOR,
+            ) => incrementing![
                 position;
-                push_and_toplevel![instructions; Instruction::Str(&program_text[start .. end])]], 
-            (ParserState::ReadUntilByte{terminator: Terminator::Comment , range: Range{start, end}}, NEWLINE_BYTE) => incrementing![
+                push_and_toplevel![instructions; Instruction::Str(&program_text[start .. end])]],
+            (
+                ParserState::ReadUntilByte {
+                    terminator: Terminator::Comment,
+                    range: Range { start, end },
+                },
+                NEWLINE_BYTE,
+            ) => incrementing![
                 position;
-                push_and_toplevel![instructions; Instruction::Comment(&program_text[start .. end])]], 
-            (ParserState::ReadUntilByte{terminator, range: Range{start, end}}, _) => incrementing![position; ParserState::ReadUntilByte{terminator, range: start .. end+1}],
+                push_and_toplevel![instructions; Instruction::Comment(&program_text[start .. end])]],
+            (
+                ParserState::ReadUntilByte {
+                    terminator,
+                    range: Range { start, end },
+                },
+                _,
+            ) => {
+                incrementing![position; ParserState::ReadUntilByte{terminator, range: start .. end+1}]
+            }
         }
     }
 }
@@ -314,11 +497,11 @@ parse_tests! {
     parse_test_sysa: ("!a", Ok(vec![Instruction::System("a".as_bytes())])),
     parse_test_sysa10: ("!a\n10", Ok(vec![Instruction::System("a".as_bytes()), Instruction::Num("10".as_bytes())])),
     parse_test_ltagt: ("<>", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosLtExecute, b'>' as Register)])),
-    parse_test_str_aa3: ("[aa]3", Ok(vec![Instruction::Str("aa".as_bytes()), Instruction::Num("3".as_bytes())])), 
-    parse_test_str_aa: ("[aa]", Ok(vec![Instruction::Str("aa".as_bytes())])), 
-    parse_test_str_aanl: ("[aa\n]", Ok(vec![Instruction::Str("aa\n".as_bytes())])), 
-    parse_test_str_quoteaanl: ("[!aa\n]", Ok(vec![Instruction::Str("!aa\n".as_bytes())])), 
-    parse_test_str_aa_not_term: ("[aa", Ok(vec![Instruction::Str("aa".as_bytes())])), 
+    parse_test_str_aa3: ("[aa]3", Ok(vec![Instruction::Str("aa".as_bytes()), Instruction::Num("3".as_bytes())])),
+    parse_test_str_aa: ("[aa]", Ok(vec![Instruction::Str("aa".as_bytes())])),
+    parse_test_str_aanl: ("[aa\n]", Ok(vec![Instruction::Str("aa\n".as_bytes())])),
+    parse_test_str_quoteaanl: ("[!aa\n]", Ok(vec![Instruction::Str("!aa\n".as_bytes())])),
+    parse_test_str_aa_not_term: ("[aa", Ok(vec![Instruction::Str("aa".as_bytes())])),
     parse_test_a: ("a", Ok(vec![Instruction::OpToString])),
     parse_test_z2: ("Z", Ok(vec![Instruction::Digits])),
     parse_test_x2: ("X", Ok(vec![Instruction::FractionDigits])),
@@ -331,7 +514,7 @@ parse_tests! {
     parse_test_return_caller: ("q", Ok(vec![Instruction::ReturnCaller])),
     parse_test_returnn: ("Q", Ok(vec![Instruction::ReturnN])),
 
-    // add failure tests 
+    // add failure tests
 }
 
 #[test]
