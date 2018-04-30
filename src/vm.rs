@@ -218,7 +218,11 @@ impl<'a, 'b> VM<'a, 'b> {
             // status enquiry
             &Instruction::Digits => Err(VMError::NotImplemented),
             &Instruction::FractionDigits => Err(VMError::NotImplemented),
-            &Instruction::StackDepth => Err(VMError::NotImplemented),
+            &Instruction::StackDepth => {
+                let len = self.stack.len();
+                self.stack.push_num(len as u64);
+                Ok(())
+            }
             // miscellaneous
             &Instruction::System(..) => Err(VMError::NotImplemented),
             &Instruction::Comment(..) => Ok(()),
@@ -389,3 +393,32 @@ fn test_exec() {
 
     assert_eq!(Vec::from("1100\n"), output);
 }
+
+#[cfg(test)]
+macro_rules! test_exec {
+    ($name:ident; $program:expr; $expected_output:expr) => (
+        #[test]
+        fn $name() {
+            let mut output: Vec<u8> = Vec::new();
+            let mut err: Vec<u8> = Vec::new();
+            {
+                let mut vm = VM {
+                    stack: dcstack::DCStack::new(),
+                    input_radix: 10,
+                    output_radix: 10,
+                    precision: 0,
+                    sink: &mut output,
+                    error_sink: &mut err,
+                };
+                assert!(vm.execute($program).is_ok())
+            }
+
+            assert_eq!(Vec::from($expected_output), output);
+        }
+    )
+}
+
+test_exec![test_num;b"10";""];
+test_exec![test_p;b"10p";"10\n"];
+test_exec![test_p2;b"10n";"10\n"];
+test_exec![test_p2p;b"10nzp";"10\n0\n"];
