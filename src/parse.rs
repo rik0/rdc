@@ -199,6 +199,11 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                     end: position + 1,
                     seen_dot: false,
             }],
+            (ParserState::TopLevel, b'A'...b'F') => incrementing![position; ParserState::Num {
+                    start: position,
+                    end: position + 1,
+                    seen_dot: false,
+            }],
             (ParserState::TopLevel, b'p') => {
                 incrementing![position; push_and_toplevel![instructions; Instruction::PrintLN]]
             }
@@ -350,6 +355,16 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 ParserState::Num {
                     start,
                     end,
+                    seen_dot,
+                },
+                b'A'...b'F',
+            ) => {
+                incrementing![position; ParserState::Num{start, end: end + 1, seen_dot: seen_dot }]
+            }
+            (
+                ParserState::Num {
+                    start,
+                    end,
                     seen_dot: _seen_dot,
                 },
                 _,
@@ -482,6 +497,7 @@ parse_tests! {
     parse_test_zero_dot_zero: ("0.0", Ok(vec![Instruction::Num("0.0".as_bytes())])),
     parse_test_00: ("00", Ok(vec![Instruction::Num("00".as_bytes())])),
     parse_test_11: ("11", Ok(vec![Instruction::Num("11".as_bytes())])),
+    parse_test_a2_dot_1: ("A.1", Ok(vec![Instruction::Num("A.1".as_bytes())])),
     parse_test_0_0: ("0 0", Ok(vec![Instruction::Num("0".as_bytes()), Instruction::Num("0".as_bytes())])),
     parse_test_1_1: ("1 1", Ok(vec![Instruction::Num("1".as_bytes()), Instruction::Num("1".as_bytes())])),
     parse_test_la: ("la", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::Load, b'a' as Register)])),
