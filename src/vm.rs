@@ -21,11 +21,13 @@ pub enum VMError {
     InvalidInputRadix,
     InvalidOutputRadix,
     InvalidPrecision,
+    NotImplemented,
 }
 
 static INVALID_INPUT_RADIX: &'static str = "invalid input radix";
 static INVALID_OUTPUT_RADIX: &'static str = "invalid output radix";
 static INVALID_PRECISION: &'static str = "invalid precision";
+static NOT_IMPLEMENTED: &'static str = "not implemented";
 
 impl VMError {
     fn message(&self) -> &str {
@@ -33,6 +35,7 @@ impl VMError {
             &VMError::InvalidInputRadix => &INVALID_INPUT_RADIX,
             &VMError::InvalidOutputRadix => &INVALID_OUTPUT_RADIX,
             &VMError::InvalidPrecision => &INVALID_PRECISION,
+            &VMError::NotImplemented => &NOT_IMPLEMENTED,
             &VMError::StackError(dcerror) => dcerror.message(),
             // TODO ugly but it works
             &VMError::FmtError(ref fmterror) => &Box::new(fmterror.description()),
@@ -136,6 +139,7 @@ impl<'a, 'b> VM<'a, 'b> {
                 self.stack.push_str(text);
                 Ok(())
             }
+            // print
             &Instruction::PrintLN => {
                 let tos = self.stack.clone_tos()?;
                 self.print(tos)
@@ -144,8 +148,25 @@ impl<'a, 'b> VM<'a, 'b> {
                 let tos = self.stack.pop()?;
                 self.print(tos)
             }
+            &Instruction::PrettyPrint => Err(VMError::NotImplemented),
+            &Instruction::PrintStack => Err(VMError::NotImplemented),
+            // arithmetic
             &Instruction::Add => bin_op![self.stack; BigDecimal::add_assign],
             &Instruction::Sub => bin_op![self.stack; BigDecimal::sub_assign],
+            &Instruction::Mul => bin_op![self.stack; BigDecimal::mul_assign],
+            &Instruction::Div => Err(VMError::NotImplemented),
+            &Instruction::Mod => Err(VMError::NotImplemented),
+            &Instruction::Divmod => Err(VMError::NotImplemented),
+            &Instruction::Exp => Err(VMError::NotImplemented),
+            &Instruction::Modexp => Err(VMError::NotImplemented),
+            &Instruction::Sqrt => Err(VMError::NotImplemented),
+            // stack
+            &Instruction::Clear => Err(VMError::NotImplemented),
+            &Instruction::Dup => Err(VMError::NotImplemented),
+            &Instruction::Swap => Err(VMError::NotImplemented),
+            // register
+            &Instruction::RegisterOperation { .. } => Err(VMError::NotImplemented),
+            // parameters
             &Instruction::SetInputRadix => {
                 let n: BigDecimal = self.stack.pop_num()?;
                 self.set_input_radix(n)
@@ -170,7 +191,18 @@ impl<'a, 'b> VM<'a, 'b> {
                 self.stack.push_num(self.precision);
                 Ok(())
             }
-            _ => Ok(()),
+            // string
+            &Instruction::OpToString => Err(VMError::NotImplemented),
+            &Instruction::ExecuteInput => Err(VMError::NotImplemented),
+            &Instruction::ReturnN => Err(VMError::NotImplemented),
+            &Instruction::ReturnCaller => Err(VMError::NotImplemented),
+            // status enquiry
+            &Instruction::Digits => Err(VMError::NotImplemented),
+            &Instruction::FractionDigits => Err(VMError::NotImplemented),
+            &Instruction::StackDepth => Err(VMError::NotImplemented),
+            // miscellaneous
+            &Instruction::System(..) => Err(VMError::NotImplemented),
+            &Instruction::Comment(..) => Ok(()),
         }
     }
 
