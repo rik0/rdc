@@ -213,6 +213,34 @@ macro_rules! empty_test_vm {
     );
 }
 
+#[cfg(test)]
+macro_rules! test_vm_num {
+    ($ ( $ x : expr ) , * ) => (
+        VM {
+            stack: dcstack_num![ $( $x ),* ],
+            input_radix: 10,
+            output_radix: 10,
+            precision: 0,
+            sink: &mut Vec::new(),
+            error_sink: &mut Vec::new(),
+        }
+    );
+}
+
+#[cfg(test)]
+macro_rules! test_vm {
+    ($ ( $ x : expr ) , * ) => (
+        VM {
+            stack: dcstack![ $( $x ),* ],
+            input_radix: 10,
+            output_radix: 10,
+            precision: 0,
+            sink: &mut Vec::new(),
+            error_sink: &mut Vec::new(),
+        }
+    );
+}
+
 #[test]
 fn test_input_radix() {
     let mut vm = empty_test_vm!();
@@ -241,4 +269,53 @@ fn test_output_radix_fail() {
 fn test_precision() {
     let mut vm = empty_test_vm!();
     assert!(vm.set_precision(BigDecimal::from(10)).is_ok());
+}
+
+#[test]
+fn test_add_happy() {
+    let mut vm = test_vm_num!(4, 5);
+    let res = vm.eval_instruction(&Instruction::Add);
+    assert!(res.is_ok());
+    assert_eq!(
+        BigDecimal::from(9),
+        vm.stack.pop_num().expect("should have been a number")
+    )
+}
+
+#[test]
+fn test_add_empty() {
+    let mut vm = test_vm_num!();
+    let res = vm.eval_instruction(&Instruction::Add);
+    match res {
+        Err(VMError::StackError(dcstack::DCError::StackEmpty)) => {}
+        _ => assert!(false),
+    }
+}
+
+#[test]
+fn test_add_tos_not_num() {
+    let mut vm = test_vm!(
+        dcstack::MemoryCell::from(32),
+        dcstack::MemoryCell::from_string("no")
+    );
+    let res = vm.eval_instruction(&Instruction::Add);
+    match res {
+        Err(VMError::StackError(dcstack::DCError::NonNumericValue)) => {}
+        _ => assert!(false),
+    }
+    assert!(vm.stack.len() == 2);
+}
+
+#[test]
+fn test_add_other_not_num() {
+    let mut vm = test_vm!(
+        dcstack::MemoryCell::from_string("no"),
+        dcstack::MemoryCell::from(32)
+    );
+    let res = vm.eval_instruction(&Instruction::Add);
+    match res {
+        Err(VMError::StackError(dcstack::DCError::NonNumericValue)) => {}
+        _ => assert!(false),
+    }
+    assert!(vm.stack.len() == 2);
 }

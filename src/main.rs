@@ -10,6 +10,7 @@ use std::fmt;
 
 mod instructions;
 mod parse;
+#[macro_use]
 mod dcstack;
 mod vm;
 

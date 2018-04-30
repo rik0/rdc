@@ -1,5 +1,6 @@
 use fmt;
 use std::error;
+use std::str::FromStr;
 
 use bigdecimal;
 use bigdecimal::BigDecimal;
@@ -19,6 +20,10 @@ impl MemoryCell {
         }
     }
 
+    pub fn from_string(s: &str) -> MemoryCell {
+        MemoryCell::Str(Vec::from(s))
+    }
+
     // pub fn num(self) -> Option<BigDecimal> {
     //     match self {
     //         MemoryCell::Str(..) => None,
@@ -34,6 +39,13 @@ impl AddAssign for MemoryCell {
                 lhs.add_assign(rhs);
             }
         }
+    }
+}
+
+impl FromStr for MemoryCell {
+    type Err = ();
+    fn from_str(s: &str) -> Result<MemoryCell, Self::Err> {
+        Ok(MemoryCell::from_string(s))
     }
 }
 
@@ -91,10 +103,21 @@ pub struct DCStack {
 }
 
 #[cfg(test)]
+macro_rules! dcstack_num {
+    ( $ ( $ x : expr ) , * ) => ({
+        use dcstack;
+        let mut dcstack = dcstack::DCStack::new();
+        $( dcstack.push(dcstack::MemoryCell::from($x)); )*
+        dcstack
+    })
+}
+
+#[cfg(test)]
 macro_rules! dcstack {
     ( $ ( $ x : expr ) , * ) => ({
-        let mut dcstack = DCStack::new();
-        $( dcstack.push(MemoryCell::from($x)); )*
+        use dcstack;
+        let mut dcstack = dcstack::DCStack::new();
+        $( dcstack.push($x); )*
         dcstack
     })
 }
@@ -163,7 +186,7 @@ impl DCStack {
         self.push(MemoryCell::Str(Vec::from(item)))
     }
 
-    fn push(&mut self, item: MemoryCell) {
+    pub fn push(&mut self, item: MemoryCell) {
         self.stack.push(item)
     }
 
@@ -203,12 +226,15 @@ impl DCStack {
         }
     }
 
-    // pub fn peek_num(&mut self) -> Result<&mut BigDecimal, DCError> {
-    //     match self.peek_mut()? {
-    //         &mut MemoryCell::Num(ref mut n) => Ok(&mut n),
-    //         &mut MemoryCell::Str(..) => Err(DCError::NonNumericValue),
-    //     }
-    // }
+    pub fn appy_num<F, T>(&mut self, f: F) -> Result<T, DCError>
+    where
+        F: Fn(&mut BigDecimal) -> T,
+    {
+        match self.peek_mut()? {
+            &mut MemoryCell::Num(ref mut n) => Ok(f(n)),
+            &mut MemoryCell::Str(..) => Err(DCError::NonNumericValue),
+        }
+    }
 
     pub fn clone_tos(&self) -> Result<MemoryCell, DCError> {
         if self.len() > 0 {
@@ -227,7 +253,7 @@ fn test_stack_empty_pop_num() {
 
 #[test]
 fn test_stack_pop_num_num() {
-    let mut s = dcstack![0];
+    let mut s = dcstack_num![0];
     assert_eq!(
         BigDecimal::from(0),
         s.pop_num().expect("i should not be empty")
