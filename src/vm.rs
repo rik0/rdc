@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io;
 use std::error;
 use std::error::Error;
 use std::convert::From;
@@ -71,12 +72,13 @@ impl From<::std::io::Error> for VMError {
     }
 }
 
-pub struct VM<'a> {
+pub struct VM<'a, 'b> {
     stack: dcstack::DCStack,
     input_radix: u32,  // [2,16]
     output_radix: u32, // >= 2
     precision: u64,    // > 0, always in decimal
     sink: &'a mut Write,
+    error_sink: &'b mut Write,
 }
 
 macro_rules! bin_op {
@@ -85,20 +87,25 @@ macro_rules! bin_op {
     });
 }
 
-impl<'a> VM<'a> {
-    pub fn new(w: &mut Write) -> VM {
+impl<'a, 'b> VM<'a, 'b> {
+    pub fn new(w: &'a mut Write, esink: &'b mut Write) -> VM<'a, 'b> {
         VM {
             stack: dcstack::DCStack::new(),
             input_radix: 10,
             output_radix: 10,
             precision: 0,
             sink: w,
+            error_sink: esink,
         }
     }
 
-    pub fn eval(&mut self, instructions: &[Instruction]) -> Result<(), VMError> {
+    pub fn eval(&mut self, instructions: &[Instruction]) -> Result<(), io::Error> {
         for instruction in instructions {
-            self.eval_instruction(instruction)?;
+            match self.eval_instruction(instruction) {
+                Err(VMError::IoError(ioerror)) => return Err(ioerror),
+                Err(error) => writeln!(self.error_sink, "dc: {}", error)?,
+                Ok(..) => {}
+            }
         }
         Ok(())
     }
@@ -192,37 +199,46 @@ impl<'a> VM<'a> {
     }
 }
 
+#[cfg(test)]
+macro_rules! empty_test_vm {
+    () => (
+        VM {
+            stack: dcstack::DCStack::new(),
+            input_radix: 10,
+            output_radix: 10,
+            precision: 0,
+            sink: &mut Vec::new(),
+            error_sink: &mut Vec::new(),
+        }
+    );
+}
+
 #[test]
 fn test_input_radix() {
-    let mut buffer = Vec::new();
-    let mut vm = VM::new(&mut buffer);
+    let mut vm = empty_test_vm!();
     assert!(vm.set_input_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_input_radix_fail() {
-    let mut buffer = Vec::new();
-    let mut vm = VM::new(&mut buffer);
+    let mut vm = empty_test_vm!();
     assert!(vm.set_input_radix(BigDecimal::from(50)).is_err());
 }
 
 #[test]
 fn test_output_radix() {
-    let mut buffer = Vec::new();
-    let mut vm = VM::new(&mut buffer);
+    let mut vm = empty_test_vm!();
     assert!(vm.set_output_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_output_radix_fail() {
-    let mut buffer = Vec::new();
-    let mut vm = VM::new(&mut buffer);
+    let mut vm = empty_test_vm!();
     assert!(vm.set_output_radix(BigDecimal::from(50)).is_err());
 }
 
 #[test]
 fn test_precision() {
-    let mut buffer = Vec::new();
-    let mut vm = VM::new(&mut buffer);
+    let mut vm = empty_test_vm!();
     assert!(vm.set_precision(BigDecimal::from(10)).is_ok());
 }

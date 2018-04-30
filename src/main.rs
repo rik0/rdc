@@ -1,6 +1,6 @@
+extern crate bigdecimal;
 extern crate num;
 extern crate num_bigint;
-extern crate bigdecimal;
 
 use std::io::Write;
 use std::path::Path;
@@ -12,7 +12,6 @@ mod instructions;
 mod parse;
 mod dcstack;
 mod vm;
-
 
 enum ProgramSource {
     Text(String),
@@ -36,7 +35,6 @@ impl ProgramSource {
 
 fn main() {
     // let us implement the real app to understand approaches to ownership
-
 
     let mut args = std::env::args().skip(1);
 
@@ -62,31 +60,27 @@ fn main() {
     }
 
     {
-        // TODO probably it is a bit better to copy some stuff in the stack that should 
+        // TODO probably it is a bit better to copy some stuff in the stack that should
         // own all the data that gets in...
-    let mut stdout = std::io::stdout();
-    let mut vm = vm::VM::new(&mut stdout);
-    for program_source in program_sources {
-        let mut source_code = Vec::new();
-        match program_source.into_bytes(&mut source_code) {
-            Ok(bytes) => match parse::parse(&source_code[..bytes]) {
-                Err(parse_error) => {
-                    eprintln!("parse error {}", parse_error);
-                }
-                Ok(instructions) => {
-                    if let Some(error) = vm.eval(&instructions[..]).err() {
-                        eprintln!("error processing {}: {}", 
-                            String::from_utf8(source_code.clone()) // TODO: fixme
-                                .unwrap_or("program is not utf8".to_string()), 
-                            error);
+        let mut stdout = std::io::stdout();
+        let mut stderr = std::io::stderr();
+        let mut vm = vm::VM::new(&mut stdout, &mut stderr);
+        for program_source in program_sources {
+            let mut source_code = Vec::new();
+            match program_source.into_bytes(&mut source_code) {
+                Ok(bytes) => match parse::parse(&source_code[..bytes]) {
+                    Err(parse_error) => eprintln!("parse error {}", parse_error),
+                    Ok(instructions) => {
+                        if let Err(ioerror) = vm.eval(&instructions[..]) {
+                            eprintln!("ioerror: {}", ioerror)
+                        }
                     }
+                },
+                Err(error) => {
+                    eprintln!("error processing file {}", error);
                 }
-            },
-            Err(error) => {
-                eprintln!("error processing file {}", error);
             }
         }
-    }
     }
 }
 

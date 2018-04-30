@@ -90,6 +90,7 @@ pub struct DCStack {
     stack: Vec<MemoryCell>,
 }
 
+#[cfg(test)]
 macro_rules! dcstack {
     ( $ ( $ x : expr ) , * ) => ({
         let mut dcstack = DCStack::new();
