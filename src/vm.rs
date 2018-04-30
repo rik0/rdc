@@ -373,5 +373,19 @@ fn test_add_other_not_num() {
 
 #[test]
 fn test_exec() {
-    let mut _vm = empty_test_vm!();
+    let mut output: Vec<u8> = Vec::new();
+    let mut err: Vec<u8> = Vec::new();
+    {
+        let mut vm = VM {
+            stack: dcstack::DCStack::new(),
+            input_radix: 10,
+            output_radix: 10,
+            precision: 0,
+            sink: &mut output,
+            error_sink: &mut err,
+        };
+        assert!(vm.execute(b"110.0[p]x").is_ok())
+    }
+
+    assert_eq!(Vec::from("1100\n"), output);
 }
