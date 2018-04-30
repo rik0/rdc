@@ -232,13 +232,13 @@ impl<'a, 'b> VM<'a, 'b> {
 
     fn set_input_radix(&mut self, radix: BigDecimal) -> Result<(), VMError> {
         let (n, scale) = radix.as_bigint_and_exponent();
-        if scale != 0 {
-            return Err(VMError::InvalidInputRadix);
-        }
+        // if scale != 0 {
+        //     return Err(VMError::InvalidInputRadix);
+        // }
 
         n.to_u32()
             .and_then(|n| {
-                if n <= 2 || n > 16 {
+                if n < 2 || n > 16 {
                     None
                 } else {
                     self.input_radix = n;
@@ -424,8 +424,7 @@ macro_rules! test_exec {
                 assert!(vm.execute($program).is_ok())
             }
 
-            assert_eq!(Vec::from($expected_output), output);
-            assert_eq!(Vec::<u8>::new(), error);
+            assert_eq!((Vec::from($expected_output), String::new()), (output, String::from_utf8(error).unwrap()));
         }
     )
 }
@@ -439,4 +438,6 @@ test_exec![test_input_set_get_base;b"8iIp";"8\n"];
 test_exec![test_input_hex;b"16iAp";"10\n"];
 test_exec![test_input_hex_aa;b"16iAAp";"170\n"];
 test_exec![test_input_hex_dec;b"16iA.Ap";"10.6\n"];
+test_exec![test_input_bin_dec;b"2i1.101p";"1.625\n"];
+
 // test_exec![test_input_oct;b"8i 10p";"8\n"];

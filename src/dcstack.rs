@@ -159,11 +159,26 @@ impl DCStack {
         fraction: &[u8],
         radix: u32,
     ) -> Result<(), DCError> {
-        println!("slice {:?}", integer);
+        println!(
+            "slice {} {:?} {:?}",
+            radix,
+            String::from_utf8(Vec::from(integer)),
+            String::from_utf8(Vec::from(fraction))
+        );
+        let scale = fraction.len();
         let mut v = Vec::from(integer);
         v.extend(fraction);
+        println!("v: {:?}", v);
         if let Some(n) = bigint::BigInt::parse_bytes(&v, radix) {
-            self.push(MemoryCell::from(BigDecimal::new(n, 0)));
+            print!("{} -> ", n);
+            let mut m = BigDecimal::new(n, 0);
+            let radix = BigDecimal::from(radix);
+            for i in 1..scale {
+                println!("{}: {}", i, m);
+                m = m / &radix;
+            }
+            println!("{}", m);
+            self.push(MemoryCell::from(m));
             return Ok(());
         }
         Err(DCError::NumParseError)
@@ -302,7 +317,19 @@ fn test_push_pop() {
 #[test]
 fn test_behavior() {
     let n = bigint::BigInt::parse_bytes(b"A", 16).expect("BigInt expecting success");
-    let n = BigDecimal::parse_bytes(b"A", 16).expect("BigDecimal expecting success");
+
+    //let n = BigDecimal::parse_bytes(b"A", 16).expect("BigDecimal expecting success");
     println!("{:?}", n);
-    assert_eq!(n, BigDecimal::from(10));
+    assert_eq!(n, bigint::BigInt::from(10));
+
+    assert_eq!(
+        bigint::BigInt::parse_bytes(b"1101", 2).expect("expecting result"),
+        bigint::BigInt::from_str("13")
+            .ok()
+            .expect("expecting result 2")
+    );
+
+    let k = bigint::BigInt::parse_bytes(b"1234", 10).expect("really");
+    assert_eq!(BigDecimal::new(k.clone(), 0), BigDecimal::from(1234));
+    assert_eq!(BigDecimal::new(k.clone(), 1), BigDecimal::from(123.4));
 }
