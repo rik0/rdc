@@ -170,7 +170,7 @@ impl<'a, 'b> VM<'a, 'b> {
             &Instruction::Add => bin_op![self.stack; BigDecimal::add_assign],
             &Instruction::Sub => bin_op![self.stack; BigDecimal::sub_assign],
             &Instruction::Mul => bin_op![self.stack; BigDecimal::mul_assign],
-            &Instruction::Div => Err(VMError::NotImplemented),
+            &Instruction::Div => bin_op![self.stack; |dest, other| *dest = &*dest / other],
             &Instruction::Mod => Err(VMError::NotImplemented),
             &Instruction::Divmod => Err(VMError::NotImplemented),
             &Instruction::Exp => Err(VMError::NotImplemented),
