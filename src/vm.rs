@@ -232,9 +232,9 @@ impl<'a, 'b> VM<'a, 'b> {
 
     fn set_input_radix(&mut self, radix: BigDecimal) -> Result<(), VMError> {
         let (n, scale) = radix.as_bigint_and_exponent();
-        // if scale != 0 {
-        //     return Err(VMError::InvalidInputRadix);
-        // }
+        if scale != 0 {
+            return Err(VMError::InvalidInputRadix);
+        }
 
         n.to_u32()
             .and_then(|n| {
@@ -433,11 +433,17 @@ test_exec![test_num;b"10";""];
 test_exec![test_p;b"10p";"10\n"];
 test_exec![test_p2;b"10n";"10\n"];
 test_exec![test_p2p;b"10nzp";"10\n0\n"];
-// test_exec![test_oct;b"8o 8p";"10\n"];
-test_exec![test_input_set_get_base;b"8iIp";"8\n"];
-test_exec![test_input_hex;b"16iAp";"10\n"];
-test_exec![test_input_hex_aa;b"16iAAp";"170\n"];
-test_exec![test_input_hex_dec;b"16iA.Ap";"10.6\n"];
-test_exec![test_input_bin_dec;b"2i1.101p";"1.625\n"];
 
+// test_exec![test_oct;b"8o 8p";"10\n"];
+
+// this does not fail because it does not parse non decimal
+test_exec![test_input_set_get_base;b"8iIp";"8\n"];
+#[cfg(feature = "parse_all_bases")]
+test_exec![test_input_hex;b"16iAp";"10\n"];
+#[cfg(feature = "parse_all_bases")]
+test_exec![test_input_hex_aa;b"16iAAp";"170\n"];
+#[cfg(feature = "parse_all_bases")]
+test_exec![test_input_hex_dec;b"16iA.Ap";"10.6\n"];
+#[cfg(feature = "parse_all_bases")]
+test_exec![test_input_bin_dec;b"2i1.101p";"1.625\n"];
 // test_exec![test_input_oct;b"8i 10p";"8\n"];

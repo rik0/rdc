@@ -133,6 +133,13 @@ macro_rules! dcstack {
     })
 }
 
+fn make_big_decimal(digits: &[u8], radix: u32) -> Result<BigDecimal, DCError> {
+    if let Some(n) = bigint::BigInt::parse_bytes(digits, radix) {
+        return Ok(BigDecimal::new(n, 0));
+    }
+    Err(DCError::NumParseError)
+}
+
 impl DCStack {
     pub fn new() -> DCStack {
         DCStack { stack: Vec::new() }
@@ -159,29 +166,51 @@ impl DCStack {
         fraction: &[u8],
         radix: u32,
     ) -> Result<(), DCError> {
-        println!(
-            "slice {} {:?} {:?}",
-            radix,
-            String::from_utf8(Vec::from(integer)),
-            String::from_utf8(Vec::from(fraction))
-        );
         let scale = fraction.len();
-        let mut v = Vec::from(integer);
-        v.extend(fraction);
-        println!("v: {:?}", v);
-        if let Some(n) = bigint::BigInt::parse_bytes(&v, radix) {
-            print!("{} -> ", n);
-            let mut m = BigDecimal::new(n, 0);
-            let radix = BigDecimal::from(radix);
-            for i in 1..scale {
-                println!("{}: {}", i, m);
-                m = m / &radix;
+
+        if cfg!(feature = "parse_all_bases") {
+            println!(
+                "slice {} {} {}",
+                radix,
+                String::from_utf8(Vec::from(integer)).unwrap(),
+                String::from_utf8(Vec::from(fraction)).unwrap()
+            );
+            let mut integer = make_big_decimal(integer, radix)?;
+            if scale > 0 {
+                let mut fraction = make_big_decimal(fraction, radix)?;
+                let radix = BigDecimal::from(radix);
+                for i in 1..scale {
+                    fraction = fraction / &radix;
+                }
+                integer += fraction;
             }
-            println!("{}", m);
-            self.push(MemoryCell::from(m));
-            return Ok(());
+            self.push(MemoryCell::from(integer));
+            Ok(())
+        } else {
+            // TODO: 1. find a way to avoid copy and similar ops
+            // 2. We can easily support other bases without digits
+            // 3. it is a much better format to have one single buffer and
+            //    the position, since it gives us the top flexibility
+            // 4. We support "everything"
+
+            if radix != 10 {
+                panic!("only supporting base 10");
+            }
+
+            // TODO: now we must copy memory, but being slightly smarter with
+            // the parser would avoid it (e.g., put all the bytes in a single slice)
+            let mut v = Vec::with_capacity(integer.len() + fraction.len() + 1);
+            v.extend_from_slice(integer);
+            if !fraction.is_empty() {
+                v.push(b'.');
+                v.extend_from_slice(fraction);
+            }
+
+            self.stack.push(MemoryCell::Num(
+                BigDecimal::parse_bytes(&v, 10).expect("number should have been valid"),
+            ));
+            Ok(())
         }
-        Err(DCError::NumParseError)
     }
 
     pub fn binary_apply_and_consume_tos<F>(&mut self, f: F) -> Result<(), DCError>
