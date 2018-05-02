@@ -54,19 +54,7 @@ impl MemoryCell {
 
     pub fn to_str_radix(&self, radix: u32) -> String {
         match self {
-            &MemoryCell::Num(ref n) => {
-                if radix == 10 {
-                    return format!("{}", n);
-                }
-                let (bigint, exp) = n.as_bigint_and_exponent();
-                let mut s = bigint.to_str_radix(radix);
-                assert!(exp >= 0);
-                if exp > 0 {
-                    let dot_insertion = s.len() - exp as usize;
-                    s.insert(dot_insertion, '.');
-                }
-                s
-            }
+            &MemoryCell::Num(ref n) => to_string_radix(n, radix),
             &MemoryCell::Str(ref v) => String::from_utf8(v.to_vec()).expect("internal utf8 error"),
         }
     }
@@ -77,6 +65,20 @@ fn test_to_string_with_base() {
         "10.2",
         MemoryCell::from_numstring("10.2").unwrap().to_str_radix(10)
     );
+}
+
+fn to_string_radix(n: &BigDecimal, radix: u32) -> String {
+    if radix == 10 {
+        return format!("{}", n);
+    }
+    let (bigint, exp) = n.as_bigint_and_exponent();
+    let mut s = bigint.to_str_radix(radix);
+    assert!(exp >= 0);
+    if exp > 0 {
+        let dot_insertion = s.len() - exp as usize;
+        s.insert(dot_insertion, '.');
+    }
+    s
 }
 
 impl AddAssign for MemoryCell {
