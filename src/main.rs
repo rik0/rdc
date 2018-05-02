@@ -68,8 +68,13 @@ fn main() {
         let mut vm = vm::VM::new(&mut stdout, &mut stderr);
         for program_source in program_sources {
             let mut source_code = Vec::new();
-            program_source.into_bytes(&mut source_code);
-            vm.execute(&source_code);
+            if let Err(error) = program_source.into_bytes(&mut source_code) {
+                eprintln!("dc: {}", error);
+                continue;
+            }
+            if let Err(error) = vm.execute(&source_code) {
+                eprintln!("dc: {}", error);
+            }
         }
     }
 }

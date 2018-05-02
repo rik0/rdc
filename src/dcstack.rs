@@ -2,6 +2,7 @@ use fmt;
 use std::error;
 use std::str;
 use std::str::FromStr;
+use num::Num;
 
 use bigdecimal;
 use bigdecimal::BigDecimal;
@@ -26,6 +27,17 @@ impl MemoryCell {
         MemoryCell::Str(Vec::from(s))
     }
 
+    pub fn from_string_radix(
+        s: &str,
+        radix: u32,
+    ) -> Result<MemoryCell, bigdecimal::ParseBigDecimalError> {
+        Ok(MemoryCell::Num(BigDecimal::from_str_radix(s, radix)?))
+    }
+
+    pub fn from_numstring(s: &str) -> Result<MemoryCell, bigdecimal::ParseBigDecimalError> {
+        MemoryCell::from_string_radix(s, 10)
+    }
+
     // pub fn as_bytes(&self) -> Option<&[u8]> {
     //     match self {
     //         &MemoryCell::Num(..) => None,
@@ -40,33 +52,45 @@ impl MemoryCell {
     //     }
     // }
 
-    pub fn to_string_with_base(&self, radix: u32) -> String {
+    pub fn to_str_radix(&self, radix: u32) -> String {
         match self {
             &MemoryCell::Num(ref n) => {
-                let (bigint, _exp) = n.as_bigint_and_exponent();
-                // TODO ignoring exponent for now
-                bigint.to_str_radix(radix)
+                // TODO provide more efficient implementation when in base 10
+                let (bigint, exp) = n.as_bigint_and_exponent();
+                let mut s = bigint.to_str_radix(radix);
+                assert!(exp >= 0);
+                if exp > 0 {
+                    let dot_insertion = s.len() - exp as usize;
+                    s.insert(dot_insertion, '.');
+                }
+                s
             }
-            &MemoryCell::Str(ref v) => {
-                // TODO make me more efficient by avoiding copy
-                String::from_utf8(v.to_vec()).expect("internal utf8 error")
-            }
+            &MemoryCell::Str(ref v) => String::from_utf8(v.to_vec()).expect("internal utf8 error"),
         }
     }
 
-    pub fn into_string_with_base(self, radix: u32) -> String {
+    pub fn into_str_radix(self, radix: u32) -> String {
         match self {
             MemoryCell::Num(n) => {
-                let (bigint, _exp) = n.into_bigint_and_exponent();
-                // TODO ignoring exponent for now
-                bigint.to_str_radix(radix)
+                // TODO provide more efficient implementation when in base 10
+                let (bigint, exp) = n.into_bigint_and_exponent();
+                let mut s = bigint.to_str_radix(radix);
+                if exp > 0 {
+                    let dot_insertion = s.len() - exp as usize;
+                    s.insert(dot_insertion, '.');
+                }
+                s
             }
-            MemoryCell::Str(v) => {
-                // TODO make me more efficient by avoiding copy
-                String::from_utf8(v).expect("internal utf8 error")
-            }
+            MemoryCell::Str(v) => String::from_utf8(v).expect("internal utf8 error"),
         }
     }
+}
+#[test]
+fn test_to_string_with_base() {
+    assert_eq!(
+        "10.2",
+        MemoryCell::from_numstring("10.2").unwrap().to_str_radix(10)
+    );
 }
 
 impl AddAssign for MemoryCell {
@@ -208,7 +232,7 @@ impl DCStack {
             if scale > 0 {
                 let mut fraction = make_big_decimal(fraction, radix)?;
                 let radix = BigDecimal::from(radix);
-                for i in 1..scale {
+                for _i in 1..scale {
                     fraction = fraction / &radix;
                 }
                 integer += fraction;
@@ -337,14 +361,6 @@ impl DCStack {
     //         &mut MemoryCell::Str(..) => Err(DCError::NonNumericValue),
     //     }
     // }
-
-    pub fn clone_tos(&self) -> Result<MemoryCell, DCError> {
-        if self.len() > 0 {
-            Ok(self.stack[self.len() - 1].clone())
-        } else {
-            Err(DCError::StackEmpty)
-        }
-    }
 }
 
 #[test]

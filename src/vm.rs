@@ -154,7 +154,7 @@ where
                 Ok(writeln!(
                     self.sink,
                     "{}",
-                    tos.to_string_with_base(self.output_radix)
+                    tos.to_str_radix(self.output_radix)
                 )?)
             }
             &Instruction::PrintPop => {
@@ -162,7 +162,7 @@ where
                 Ok(writeln!(
                     self.sink,
                     "{}",
-                    tos.into_string_with_base(self.output_radix)
+                    tos.into_str_radix(self.output_radix)
                 )?)
             }
             &Instruction::PrettyPrint => Err(VMError::NotImplemented),
@@ -403,7 +403,7 @@ fn test_exec() {
         assert!(vm.execute(b"110.0[p]x").is_ok())
     }
 
-    assert_eq!(Vec::from("1100\n"), output);
+    assert_eq!(Vec::from("110.0\n"), output);
 }
 
 macro_rules! test_exec {
