@@ -85,13 +85,17 @@ impl From<parse::ParserError> for VMError {
     }
 }
 
-pub struct VM<'a, 'b> {
+pub struct VM<W: Write, WE: Write>
+where
+    W: Write,
+    WE: Write,
+{
     stack: dcstack::DCStack,
     input_radix: u32,  // [2,16]
     output_radix: u32, // >= 2
     precision: u64,    // > 0, always in decimal
-    sink: &'a mut Write,
-    error_sink: &'b mut Write,
+    sink: W,
+    error_sink: WE,
 }
 
 macro_rules! bin_op {
@@ -100,8 +104,12 @@ macro_rules! bin_op {
     });
 }
 
-impl<'a, 'b> VM<'a, 'b> {
-    pub fn new(w: &'a mut Write, esink: &'b mut Write) -> VM<'a, 'b> {
+impl<W, WE> VM<W, WE>
+where
+    W: Write,
+    WE: Write,
+{
+    pub fn new(w: W, esink: WE) -> VM<W, WE> {
         VM {
             stack: dcstack::DCStack::new(),
             input_radix: 10,
@@ -128,21 +136,6 @@ impl<'a, 'b> VM<'a, 'b> {
         Ok(self.eval(&instructions)?)
     }
 
-    fn print(&mut self, element: dcstack::MemoryCell) -> Result<(), VMError> {
-        match element {
-            dcstack::MemoryCell::Num(n) => {
-                let (bigint, _exp) = n.into_bigint_and_exponent();
-                let s = bigint.to_str_radix(self.output_radix);
-                // TODO ignoring exp means we are not printing the .
-                writeln!(self.sink, "{}", s)?;
-            }
-            dcstack::MemoryCell::Str(s) => {
-                writeln!(self.sink, "{}", String::from_utf8_lossy(&s))?;
-            }
-        }
-        Ok(())
-    }
-
     fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
         match instruction {
             &Instruction::Nop => Ok(()),
@@ -157,12 +150,20 @@ impl<'a, 'b> VM<'a, 'b> {
             }
             // print
             &Instruction::PrintLN => {
-                let tos = self.stack.clone_tos()?;
-                self.print(tos)
+                let tos = self.stack.peek()?;
+                Ok(writeln!(
+                    self.sink,
+                    "{}",
+                    tos.to_string_with_base(self.output_radix)
+                )?)
             }
             &Instruction::PrintPop => {
                 let tos = self.stack.pop()?;
-                self.print(tos)
+                Ok(writeln!(
+                    self.sink,
+                    "{}",
+                    tos.into_string_with_base(self.output_radix)
+                )?)
             }
             &Instruction::PrettyPrint => Err(VMError::NotImplemented),
             &Instruction::PrintStack => Err(VMError::NotImplemented),

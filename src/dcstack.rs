@@ -1,5 +1,6 @@
 use fmt;
 use std::error;
+use std::str;
 use std::str::FromStr;
 
 use bigdecimal;
@@ -38,6 +39,34 @@ impl MemoryCell {
     //         MemoryCell::Num(n) => Some(n),
     //     }
     // }
+
+    pub fn to_string_with_base(&self, radix: u32) -> String {
+        match self {
+            &MemoryCell::Num(ref n) => {
+                let (bigint, _exp) = n.as_bigint_and_exponent();
+                // TODO ignoring exponent for now
+                bigint.to_str_radix(radix)
+            }
+            &MemoryCell::Str(ref v) => {
+                // TODO make me more efficient by avoiding copy
+                String::from_utf8(v.to_vec()).expect("internal utf8 error")
+            }
+        }
+    }
+
+    pub fn into_string_with_base(self, radix: u32) -> String {
+        match self {
+            MemoryCell::Num(n) => {
+                let (bigint, _exp) = n.into_bigint_and_exponent();
+                // TODO ignoring exponent for now
+                bigint.to_str_radix(radix)
+            }
+            MemoryCell::Str(v) => {
+                // TODO make me more efficient by avoiding copy
+                String::from_utf8(v).expect("internal utf8 error")
+            }
+        }
+    }
 }
 
 impl AddAssign for MemoryCell {
@@ -282,13 +311,13 @@ impl DCStack {
         }
     }
 
-    // pub fn peek(&self) -> Result<&MemoryCell, DCError> {
-    //     if self.len() > 0 {
-    //         Ok(&self.stack[self.len() - 1])
-    //     } else {
-    //         Err(DCError::StackEmpty)
-    //     }
-    // }
+    pub fn peek(&self) -> Result<&MemoryCell, DCError> {
+        if self.len() > 0 {
+            Ok(&self.stack[self.len() - 1])
+        } else {
+            Err(DCError::StackEmpty)
+        }
+    }
 
     pub fn peek_mut(&mut self) -> Result<&mut MemoryCell, DCError> {
         let len = self.len();
