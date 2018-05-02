@@ -2,6 +2,8 @@ use fmt;
 use std::error;
 use std::str;
 use std::str::FromStr;
+use std::io;
+use std::io::Write;
 use num::Num;
 
 use bigdecimal;
@@ -254,6 +256,16 @@ impl DCStack {
         }
     }
 
+    pub fn write_to<W>(&self, w: &mut W, radix: u32) -> Result<(), io::Error>
+    where
+        W: io::Write,
+    {
+        for item in self.stack.iter().rev() {
+            writeln!(w, "{}", item.to_str_radix(radix))?;
+        }
+        Ok(())
+    }
+
     pub fn binary_apply_and_consume_tos<F>(&mut self, f: F) -> Result<(), DCError>
     where
         F: Fn(&mut BigDecimal, BigDecimal),
@@ -349,6 +361,15 @@ impl DCStack {
     //         &mut MemoryCell::Str(..) => Err(DCError::NonNumericValue),
     //     }
     // }
+}
+
+impl fmt::Display for DCStack {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        for item in self.stack.iter().rev() {
+            writeln!(f, "{}", item.to_str_radix(10))?;
+        }
+        Ok(())
+    }
 }
 
 #[test]

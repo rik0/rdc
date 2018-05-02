@@ -166,7 +166,7 @@ where
                 )?)
             }
             &Instruction::PrettyPrint => Err(VMError::NotImplemented),
-            &Instruction::PrintStack => Err(VMError::NotImplemented),
+            &Instruction::PrintStack => Ok(self.stack.write_to(&mut self.sink, self.output_radix)?),
             // arithmetic
             &Instruction::Add => bin_op![self.stack; BigDecimal::add_assign],
             &Instruction::Sub => bin_op![self.stack; BigDecimal::sub_assign],
