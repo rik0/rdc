@@ -162,7 +162,7 @@ where
                 Ok(writeln!(
                     self.sink,
                     "{}",
-                    tos.into_str_radix(self.output_radix)
+                    tos.to_str_radix(self.output_radix)
                 )?)
             }
             &Instruction::PrettyPrint => Err(VMError::NotImplemented),
@@ -250,11 +250,21 @@ where
     }
 
     fn set_output_radix(&mut self, radix: BigDecimal) -> Result<(), VMError> {
-        if radix != BigDecimal::from(10) {
+        let (n, scale) = radix.as_bigint_and_exponent();
+        if scale != 0 {
             return Err(VMError::InvalidOutputRadix);
         }
-        self.output_radix = 10;
-        return Ok(());
+
+        n.to_u32()
+            .and_then(|n| {
+                if n < 2 {
+                    None
+                } else {
+                    self.output_radix = n;
+                    Some(())
+                }
+            })
+            .ok_or(VMError::InvalidOutputRadix)
     }
 
     fn set_precision(&mut self, precision: BigDecimal) -> Result<(), VMError> {
@@ -329,7 +339,7 @@ fn test_output_radix() {
 #[test]
 fn test_output_radix_fail() {
     let mut vm = empty_test_vm!();
-    assert!(vm.set_output_radix(BigDecimal::from(50)).is_err());
+    assert!(vm.set_output_radix(BigDecimal::from(1)).is_err());
 }
 
 #[test]
@@ -435,7 +445,7 @@ test_exec![test_p;b"10p";"10\n"];
 test_exec![test_p2;b"10n";"10\n"];
 test_exec![test_p2p;b"10nzp";"10\n0\n"];
 
-// test_exec![test_oct;b"8o 8p";"10\n"];
+test_exec![test_oct;b"8o 8p";"10\n"];
 
 // this does not fail because it does not parse non decimal
 test_exec![test_input_set_get_base;b"8iIp";"8\n"];
