@@ -1,12 +1,14 @@
-extern crate bigdecimal;
-extern crate num;
-extern crate num_bigint;
+extern crate rdc;
 
 use std::io::Write;
 use std::path::Path;
 use std::fs::File;
+use std::io;
 use std::io::prelude::*;
+use std::process;
 use std::fmt;
+use std::os;
+use std::ffi::OsStr;
 
 mod instructions;
 mod parse;
@@ -33,6 +35,7 @@ impl ProgramSource {
         }
     }
 }
+
 
 fn main() {
     // let us implement the real app to understand approaches to ownership

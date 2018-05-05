@@ -1,5 +1,5 @@
 use std::ops::Range;
-use fmt;
+use std::fmt;
 use std::error;
 
 use instructions::*;

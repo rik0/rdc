@@ -1,9 +1,8 @@
-use fmt;
+use std::fmt;
 use std::error;
 use std::str;
 use std::str::FromStr;
 use std::io;
-use std::io::Write;
 use num::Num;
 
 use bigdecimal;
@@ -58,6 +57,28 @@ impl MemoryCell {
         match self {
             &MemoryCell::Num(ref n) => to_string_radix(n, radix),
             &MemoryCell::Str(ref v) => String::from_utf8(v.to_vec()).expect("internal utf8 error"),
+        }
+    }
+
+    pub fn apply_num<F>(&mut self, f: F) -> Result<Self, DCError>
+    where
+        F: Fn(&BigDecimal) -> BigDecimal,
+    {
+        match self {
+            &mut MemoryCell::Num(ref n) => Ok(MemoryCell::Num(f(n))),
+            &mut MemoryCell::Str(ref _v) => Err(DCError::NonNumericValue),
+        }
+    }
+
+    pub fn apply_num_opt<F>(&mut self, f: F) -> Result<Self, DCError>
+    where
+        F: Fn(&BigDecimal) -> Option<BigDecimal>,
+    {
+        match self {
+            &mut MemoryCell::Num(ref n) => Ok(MemoryCell::Num(
+                f(n).ok_or(DCError::InternalConversionError)?,
+            )),
+            &mut MemoryCell::Str(ref _v) => Err(DCError::NonNumericValue),
         }
     }
 }
@@ -121,11 +142,13 @@ pub enum DCError {
     NonNumericValue,
     NonStringValue,
     NumParseError,
+    InternalConversionError,
 }
 static STACK_EMPTY: &'static str = "stack empty";
 static NON_NUMERIC_VALUE: &'static str = "non numeric value";
 static NON_STRING_VALUE: &'static str = "non string value";
 static NUM_PARSE_ERROR: &'static str = "bytes do not represent a number";
+static INTERNAL_CONVERSION_ERROR: &'static str = "internal conversion error";
 
 impl DCError {
     pub fn message(&self) -> &'static str {
@@ -134,6 +157,7 @@ impl DCError {
             &DCError::NonNumericValue => &NON_NUMERIC_VALUE,
             &DCError::NonStringValue => &NON_STRING_VALUE,
             &DCError::NumParseError => &NUM_PARSE_ERROR,
+            &DCError::InternalConversionError => &INTERNAL_CONVERSION_ERROR,
         }
     }
 }
@@ -296,6 +320,30 @@ impl DCStack {
         } else {
             Err(DCError::NonNumericValue)
         }
+    }
+
+    pub fn apply_tos_num<F>(&mut self, f: F) -> Result<(), DCError>
+    where
+        F: Fn(&BigDecimal) -> BigDecimal,
+    {
+        if self.is_empty() {
+            return Err(DCError::StackEmpty);
+        }
+        let len = self.len();
+        self.stack[len - 1] = self.stack[len - 1].apply_num(f)?;
+        Ok(())
+    }
+
+    pub fn apply_tos_num_opt<F>(&mut self, f: F) -> Result<(), DCError>
+    where
+        F: Fn(&BigDecimal) -> Option<BigDecimal>,
+    {
+        if self.is_empty() {
+            return Err(DCError::StackEmpty);
+        }
+        let len = self.len();
+        self.stack[len - 1] = self.stack[len - 1].apply_num_opt(f)?;
+        Ok(())
     }
 
     pub fn push_str(&mut self, item: &[u8]) {

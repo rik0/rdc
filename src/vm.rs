@@ -7,8 +7,8 @@ use std::ops::*;
 use std::io::prelude::*;
 
 use bigdecimal::BigDecimal;
-
-use num::ToPrimitive;
+use bigdecimal::ToPrimitive;
+use bigdecimal::FromPrimitive;
 
 use parse;
 use dcstack;
@@ -172,11 +172,20 @@ where
             &Instruction::Sub => bin_op![self.stack; BigDecimal::sub_assign],
             &Instruction::Mul => bin_op![self.stack; BigDecimal::mul_assign],
             &Instruction::Div => bin_op![self.stack; |dest, other| *dest = &*dest / other],
-            &Instruction::Mod => Err(VMError::NotImplemented),
+            &Instruction::Mod => bin_op![self.stack; |dest, other| *dest = &*dest % other],
             &Instruction::Divmod => Err(VMError::NotImplemented),
             &Instruction::Exp => Err(VMError::NotImplemented),
             &Instruction::Modexp => Err(VMError::NotImplemented),
-            &Instruction::Sqrt => Err(VMError::NotImplemented),
+            &Instruction::Sqrt => {
+                // TODO: this implementation is buggy as it goes through fp
+                let precision = self.precision as i64;
+                Ok(self.stack.apply_tos_num_opt(|n| {
+                    ToPrimitive::to_f64(n)
+                        .map(f64::sqrt)
+                        .and_then(BigDecimal::from_f64)
+                        .map(|n| n.with_scale(precision))
+                })?)
+            }
             // stack
             &Instruction::Clear => Err(VMError::NotImplemented),
             &Instruction::Dup => Err(VMError::NotImplemented),
@@ -269,8 +278,10 @@ where
 
     fn set_precision(&mut self, precision: BigDecimal) -> Result<(), VMError> {
         if let Some(value) = precision.to_u64() {
-            self.precision = value;
-            return Ok(());
+            if value >= 2 {
+                self.precision = value;
+                return Ok(());
+            }
         }
         Err(VMError::InvalidPrecision)
     }
@@ -458,3 +469,11 @@ test_exec![test_input_hex_dec;b"16iA.Ap";"10.6\n"];
 #[cfg(feature = "parse_all_bases")]
 test_exec![test_input_bin_dec;b"2i1.101p";"1.625\n"];
 // test_exec![test_input_oct;b"8i 10p";"8\n"];
+
+// sqrt
+// test_exec![test_sqrt;b".4vp";"0.6\n"];
+// test_exec![test_sqrt_with_precision;b"2p.4vp";"0.63\n"];
+test_exec![test_sqrt_on_int;b"4vp";"2\n"];
+test_exec![test_sqrt_on_int_with_precision;b"2k4vp";"2.00\n"];
+test_exec![test_sqrt_on_int_irr_resul;b"2vp";"1\n"];
+test_exec![test_sqrt_on_int_with_precision_irr_resul;b"2k2vp";"1.41\n"];

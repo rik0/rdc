@@ -1,1 +1,5 @@
 target
+*.log
+*~
+*.swp
+.DS_Store
