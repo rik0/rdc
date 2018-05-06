@@ -427,6 +427,11 @@ impl DCStack {
         }
     }
 
+    pub fn clear(&mut self) -> Result<(), DCError> {
+        self.stack.clear();
+        Ok(())
+    }
+
     // pub fn appy_num<F, T>(&mut self, f: F) -> Result<T, DCError>
     // where
     //     F: Fn(&mut BigDecimal) -> T,
@@ -507,6 +512,20 @@ fn test_swap() {
     let b = s.pop_num().unwrap();
     assert_eq!(20, ToPrimitive::to_u64(&b).unwrap());
     assert_eq!(10, ToPrimitive::to_u64(&a).unwrap());
+}
+
+#[test]
+fn test_clear() {
+    let mut s = dcstack_num!(10);
+    assert_eq!(Ok(()), s.clear());
+    assert_eq!(0, s.len());
+}
+
+#[test]
+fn test_clear_empty() {
+    let mut s = DCStack::new();
+    assert_eq!(Ok(()), s.clear());
+    assert_eq!(0, s.len());
 }
 
 #[test]

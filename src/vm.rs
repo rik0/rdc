@@ -197,7 +197,7 @@ where
                 })?)
             }
             // stack
-            &Instruction::Clear => Err(VMError::NotImplemented),
+            &Instruction::Clear => Ok(self.stack.clear()?),
             &Instruction::Dup => Ok(self.stack.dup()?),
             &Instruction::Swap => Ok(self.stack.swap()?),
             // register
@@ -496,3 +496,6 @@ test_exec![div; b"10 20 / p";"0\n"];
 test_exec![mod_; b"10 20 % p";"10\n"];
 
 test_exec![swap;b"10 20 rf";"10\n20\n"];
+
+test_exec![clear;b"10cf";""];
+test_exec![clear_empry;b"cf";""];

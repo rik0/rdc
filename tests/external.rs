@@ -96,3 +96,6 @@ test_dc![dup_empty;"df"];
 test_dc![swap_empty;"r"];
 test_dc![swap_one;"10rf"];
 test_dc![swap;"10 20 rf"];
+
+test_dc![clear;"10cf"];
+test_dc![clear_empty;"cf"];
