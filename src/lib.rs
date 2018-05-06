@@ -72,7 +72,7 @@ where
     program_sources
 }
 
-pub fn dc<'a, I, S, W, E>(args: I, stdout: W, stderr: E)
+pub fn dc<'a, I, S, W, E>(args: I, stdout: W, stderr: E) -> (W, E)
 where
     I: Iterator<Item = S>,
     S: AsRef<str> + Into<String> + PartialEq<&'a str>,
@@ -80,33 +80,33 @@ where
     E: Write,
 {
     let program_sources = parse_args(args);
-    dc_exec_program_sources(program_sources, stdout, stderr);
+    dc_exec_program_sources(program_sources, stdout, stderr)
 }
 
 fn dc_exec_program_sources<ProgramText, ProgramPath, I, W, E>(
     program_sources: I,
     stdout: W,
     stderr: E,
-) where
+) -> (W, E)
+where
     I: IntoIterator<Item = ProgramSource<ProgramText, ProgramPath>>,
     ProgramPath: AsRef<OsStr>,
     ProgramText: Deref<Target = str>,
     W: Write,
     E: Write,
 {
-    {
-        let mut vm = vm::VM::new(stdout, stderr);
-        for program_source in program_sources {
-            let mut source_code = Vec::new();
-            if let Err(error) = program_source.into_bytes(&mut source_code) {
-                eprintln!("dc: {}", error);
-                continue;
-            }
-            if let Err(error) = vm.execute(&source_code) {
-                eprintln!("dc: {}", error);
-            }
+    let mut vm = vm::VM::new(stdout, stderr);
+    for program_source in program_sources {
+        let mut source_code = Vec::new();
+        if let Err(error) = program_source.into_bytes(&mut source_code) {
+            eprintln!("dc: {}", error);
+            continue;
+        }
+        if let Err(error) = vm.execute(&source_code) {
+            eprintln!("dc: {}", error);
         }
     }
+    vm.sinks()
 }
 
 fn print_help(code: i32) {

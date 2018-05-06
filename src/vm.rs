@@ -112,6 +112,10 @@ where
         }
     }
 
+    pub fn sinks(self) -> (W, WE) {
+        (self.sink, self.error_sink)
+    }
+
     pub fn eval(&mut self, instructions: &[Instruction]) -> Result<(), io::Error> {
         for instruction in instructions {
             match self.eval_instruction(instruction) {
