@@ -19,7 +19,6 @@ pub enum VMError {
     StackError(dcstack::DCError),
     FmtError(fmt::Error),
     IoError(::std::io::Error),
-    ParseError(parse::ParserError),
     InvalidInputRadix,
     InvalidOutputRadix,
     InvalidPrecision,
@@ -39,7 +38,6 @@ impl VMError {
             &VMError::InvalidPrecision => &INVALID_PRECISION,
             &VMError::NotImplemented => &NOT_IMPLEMENTED,
             &VMError::StackError(dcerror) => dcerror.message(),
-            &VMError::ParseError(ref parse_error) => &Box::new(parse_error.description()),
             // TODO ugly but it works: display should only be a simple message and we should
             // do the interesting stuff in fmt, which can allocate memory more easily
             &VMError::FmtError(ref fmterror) => &Box::new(fmterror.description()),
@@ -76,12 +74,6 @@ impl From<fmt::Error> for VMError {
 impl From<::std::io::Error> for VMError {
     fn from(error: ::std::io::Error) -> VMError {
         VMError::IoError(error)
-    }
-}
-
-impl From<parse::ParserError> for VMError {
-    fn from(error: parse::ParserError) -> VMError {
-        VMError::ParseError(error)
     }
 }
 
@@ -131,9 +123,15 @@ where
         Ok(())
     }
 
-    pub fn execute(&mut self, program_text: &[u8]) -> Result<(), VMError> {
-        let instructions = parse::parse(program_text)?;
-        Ok(self.eval(&instructions)?)
+    pub fn execute(&mut self, program_text: &[u8]) -> Result<(), io::Error> {
+        match parse::parse(program_text) {
+            Ok(instructions) => Ok(self.eval(&instructions)?),
+            Err(parse_error) => {
+                self.eval(&parse_error.instructions)?;
+                writeln!(self.error_sink, "dc: {}", parse_error)?;
+                self.execute(parse_error.unparsed)
+            }
+        }
     }
 
     fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
@@ -221,7 +219,7 @@ where
             &Instruction::OpToString => Err(VMError::NotImplemented),
             &Instruction::ExecuteTos => {
                 let bytes = self.stack.pop_str()?;
-                self.execute(&bytes)
+                Ok(self.execute(&bytes)?)
             }
             &Instruction::ExecuteInput => Err(VMError::NotImplemented),
             &Instruction::ReturnN => Err(VMError::NotImplemented),

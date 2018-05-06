@@ -31,33 +31,31 @@ enum ParserErrorType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ParserError {
-    position: usize,
+pub struct ParserError<'a> {
+    pub position: usize,
     error_type: ParserErrorType,
+    pub instructions: Vec<Instruction<'a>>,
+    pub unparsed: &'a [u8],
 }
 
 static EOP_MESSAGE: &'static str = "end of stream";
 static INVALID_CHARACTER: &'static str = "invalid character";
 
-impl fmt::Display for ParserError {
+impl<'a> fmt::Display for ParserError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match &self.error_type {
             &ParserErrorType::InvalidCharacter(ch) => {
-                writeln!(
-                    f,
-                    "invalid character {} at position {}",
-                    ch as char, self.position
-                )?;
+                write!(f, "'{}' ({:04o}) unimplemented", ch as char, ch)?;
             }
             &ParserErrorType::EOP(ref s) => {
-                writeln!(f, "end of program {}", s)?;
+                write!(f, "end of program {}", s)?;
             }
         }
         Ok(())
     }
 }
 
-impl error::Error for ParserError {
+impl<'a> error::Error for ParserError<'a> {
     fn description(&self) -> &str {
         match &self.error_type {
             &ParserErrorType::EOP(..) => &EOP_MESSAGE,
@@ -140,6 +138,8 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 ParserState::Error(position, error_type) => Err(ParserError {
                     position,
                     error_type,
+                    instructions,
+                    unparsed: &program_text[position + 1..],
                 }),
                 ParserState::TopLevel => Ok(instructions),
                 ParserState::Num {
@@ -157,6 +157,8 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 ParserState::Register(_) => Err(ParserError {
                     position,
                     error_type: ParserErrorType::EOP("was expecting a register".to_string()),
+                    instructions,
+                    unparsed: &program_text[position + 1..],
                 }),
                 ParserState::Mark => Ok(instructions),
                 // dc actually seg faults in this case
@@ -165,6 +167,8 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 } => Err(ParserError {
                     position,
                     error_type: ParserErrorType::EOP("string not completed".to_string()),
+                    instructions,
+                    unparsed: &program_text[position + 1..],
                 }),
                 ParserState::PrepareToReadUntil { .. } => Ok(instructions),
                 ParserState::ReadUntilByte {
@@ -195,6 +199,8 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 return Err(ParserError {
                     position,
                     error_type,
+                    instructions,
+                    unparsed: &program_text[position + 1..],
                 })
             }
             (ParserState::TopLevel, 0) => {
@@ -342,8 +348,9 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
             (ParserState::TopLevel, b' ') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, b'\n') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, ch) => {
-                ParserState::Error(position, ParserErrorType::InvalidCharacter(ch))
+                incrementing![position; ParserState::Error(position, ParserErrorType::InvalidCharacter(ch))]
             }
+
             (
                 ParserState::Num {
                     start,
@@ -476,7 +483,7 @@ macro_rules! parse_tests {
 
 parse_tests! {
     parse_test_empty: ("", Ok(vec![])),
-    parse_test_invalid: ("\x01", Err(ParserError{position: 0, error_type: ParserErrorType::InvalidCharacter(1)})),
+    // parse_test_invalid: ("\x01", Err(ParserError{position: 0, error_type: ParserErrorType::InvalidCharacter(1), instructions: Vec::new(), unparsed: &"\x01"[..]})),
     parse_test_zero: ("\0", Ok(vec![Instruction::Nop])),
     parse_test_p: ("p", Ok(vec![Instruction::PrintLN])),
     parse_test_n: ("n", Ok(vec![Instruction::PrintPop])),
@@ -553,4 +560,17 @@ parse_tests! {
 fn testparse() {
     let (input, expected) = ("", Ok(vec![]));
     assert_eq!(expected, parse(input.as_bytes()));
+}
+
+#[test]
+fn testparse_invalid() {
+    let input = b"\x01";
+    if let Err(parse_error) = parse(input) {
+        assert_eq!(ParserErrorType::InvalidCharacter(1), parse_error.error_type);
+        assert_eq!(0, parse_error.position);
+        assert!(parse_error.unparsed.is_empty());
+        assert!(parse_error.instructions.is_empty())
+    } else {
+        assert!(false)
+    }
 }
