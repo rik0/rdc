@@ -90,3 +90,6 @@ test_dc![sub; "10 20 - p"];
 test_dc![mul; "10 20 * p"];
 test_dc![div; "10 20 / p"];
 test_dc![mod_; "10 20 % p"];
+
+test_dc![dup;"10df"];
+test_dc![dup_empty;"df"];

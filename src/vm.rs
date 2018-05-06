@@ -198,7 +198,7 @@ where
             }
             // stack
             &Instruction::Clear => Err(VMError::NotImplemented),
-            &Instruction::Dup => Err(VMError::NotImplemented),
+            &Instruction::Dup => Ok(self.stack.dup()?),
             &Instruction::Swap => Err(VMError::NotImplemented),
             // register
             &Instruction::RegisterOperation { .. } => Err(VMError::NotImplemented),

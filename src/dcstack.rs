@@ -181,11 +181,6 @@ impl error::Error for DCError {
     }
 }
 
-#[derive(Debug)]
-pub struct DCStack {
-    stack: Vec<MemoryCell>,
-}
-
 #[cfg(test)]
 macro_rules! dcstack_num {
     ( $ ( $ x : expr ) , * ) => ({
@@ -211,6 +206,11 @@ fn make_big_decimal(digits: &[u8], radix: u32) -> Result<BigDecimal, DCError> {
         return Ok(BigDecimal::new(n, 0));
     }
     Err(DCError::NumParseError)
+}
+
+#[derive(Debug)]
+pub struct DCStack {
+    stack: Vec<MemoryCell>,
 }
 
 impl DCStack {
@@ -407,6 +407,11 @@ impl DCStack {
         }
     }
 
+    pub fn dup(&mut self) -> Result<(), DCError> {
+        let tos = self.peek()?.clone();
+        Ok(self.push(tos))
+    }
+
     // pub fn appy_num<F, T>(&mut self, f: F) -> Result<T, DCError>
     // where
     //     F: Fn(&mut BigDecimal) -> T,
@@ -450,6 +455,19 @@ fn test_push_pop() {
     s.push_num(10.22);
     let bd = s.pop_num().expect("was expecting to get a number");
     assert_eq!(BigDecimal::from_str("10.22").expect("was a number"), bd);
+}
+
+#[test]
+fn test_dup() {
+    let mut s = dcstack_num!(10);
+    assert_eq!(Ok(()), s.dup());
+    assert_eq!(2, s.len());
+}
+
+#[test]
+fn test_dup_empty() {
+    let mut s = DCStack::new();
+    assert_eq!(Err(DCError::StackEmpty), s.dup());
 }
 
 #[test]

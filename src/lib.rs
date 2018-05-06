@@ -9,7 +9,6 @@ mod dcstack;
 pub mod vm;
 
 use std::io::Write;
-use std::io;
 use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
