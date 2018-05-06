@@ -138,6 +138,11 @@ where
         }
     }
 
+    #[inline]
+    fn precision_i64(&self) -> i64 {
+        self.precision as i64
+    }
+
     fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
         match instruction {
             &Instruction::Nop => Ok(()),
@@ -173,14 +178,17 @@ where
             &Instruction::Add => bin_op![self.stack; BigDecimal::add_assign],
             &Instruction::Sub => bin_op![self.stack; BigDecimal::sub_assign],
             &Instruction::Mul => bin_op![self.stack; BigDecimal::mul_assign],
-            &Instruction::Div => bin_op![self.stack; |dest, other| *dest = &*dest / other],
+            &Instruction::Div => {
+                let precision = self.precision_i64();
+                bin_op![self.stack; |dest, other| {*dest = &*dest / other; *dest = dest.with_scale(precision)}]
+            }
             &Instruction::Mod => bin_op![self.stack; |dest, other| *dest = &*dest % other],
             &Instruction::Divmod => Err(VMError::NotImplemented),
             &Instruction::Exp => Err(VMError::NotImplemented),
             &Instruction::Modexp => Err(VMError::NotImplemented),
             &Instruction::Sqrt => {
                 // TODO: this implementation is buggy as it goes through fp
-                let precision = self.precision as i64;
+                let precision = self.precision_i64();
                 Ok(self.stack.apply_tos_num_opt(|n| {
                     ToPrimitive::to_f64(n)
                         .map(f64::sqrt)
@@ -479,3 +487,10 @@ test_exec![test_sqrt_on_int;b"4vp";"2\n"];
 test_exec![test_sqrt_on_int_with_precision;b"2k4vp";"2.00\n"];
 test_exec![test_sqrt_on_int_irr_resul;b"2vp";"1\n"];
 test_exec![test_sqrt_on_int_with_precision_irr_resul;b"2k2vp";"1.41\n"];
+
+test_exec![_10p; b"10p";"10\n"];
+test_exec![add; b"10 20 + p";"30\n"];
+test_exec![sub; b"10 20 - p";"-10\n"];
+test_exec![mul; b"10 20 * p";"200\n"];
+test_exec![div; b"10 20 / p";"0\n"];
+test_exec![mod_; b"10 20 % p";"10\n"];
