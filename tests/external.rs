@@ -43,31 +43,30 @@ macro_rules! test_dc {
     ($name:ident; $program:expr) => (
         #[test]
         fn $name() {
-            let mut stdout: Vec<u8> = Vec::new();
-    let mut stderr: Vec<u8> = Vec::new();
-    let programs = vec![$program];
-    let expected = run_dc(programs.clone()).expect("process error");
-    let dc_args = prepare_arguments(programs);
-    let (actual_output, actual_error) = rdc::dc(dc_args.into_iter(), stderr, stdout);
-    assert_eq!(
-        (
-            String::from_utf8(expected.stdout).expect("utf error in system dc output"),
-            String::from_utf8(expected.stderr).expect("utf error in system dc stderr")
-        ),
-        (
-            String::from_utf8(actual_output).expect("utf8 output"),
-            String::from_utf8(actual_error).expect("utf8 error")
-        ),
-    );
-
+            let stdout: Vec<u8> = Vec::new();
+            let stderr: Vec<u8> = Vec::new();
+            let programs = vec![$program];
+            let expected = run_dc(programs.clone()).expect("process error");
+            let dc_args = prepare_arguments(programs);
+            let (actual_output, actual_error) = rdc::dc(dc_args.into_iter(), stderr, stdout);
+            assert_eq!(
+                (
+                    String::from_utf8(expected.stdout).expect("utf error in system dc output"),
+                    String::from_utf8(expected.stderr).expect("utf error in system dc stderr")
+                ),
+                (
+                    String::from_utf8(actual_output).expect("utf8 output"),
+                    String::from_utf8(actual_error).expect("utf8 error")
+                ),
+            );
         }
     )
 }
 
 #[test]
 fn test() {
-    let mut stdout: Vec<u8> = Vec::new();
-    let mut stderr: Vec<u8> = Vec::new();
+    let stdout: Vec<u8> = Vec::new();
+    let stderr: Vec<u8> = Vec::new();
     let programs = vec!["10p"];
     let expected = run_dc(programs.clone()).expect("process error");
     let dc_args = prepare_arguments(programs);
