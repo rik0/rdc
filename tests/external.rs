@@ -4,7 +4,6 @@ use std::io;
 use std::process;
 use std::ffi::OsStr;
 use std::ffi::OsString;
-use std::iter;
 
 use std::process::Command;
 
@@ -19,9 +18,6 @@ where
         dc_args.push(arg.as_ref().to_os_string());
     }
 
-    // let dc_args = args.into_iter()
-    //     .zip(iter::once(OsString::from("-e")).cycle())
-    //     .flat_map(|t| iter::once(t.1).chain(iter::once(t.0.as_ref())));
     let mut command = Command::new("dc");
     let c = (&mut command)
         .stdin(process::Stdio::null())

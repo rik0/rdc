@@ -28,6 +28,7 @@ impl MemoryCell {
         MemoryCell::Str(Vec::from(s))
     }
 
+    #[allow(dead_code)]
     pub fn from_string_radix(
         s: &str,
         radix: u32,
@@ -35,24 +36,28 @@ impl MemoryCell {
         Ok(MemoryCell::Num(BigDecimal::from_str_radix(s, radix)?))
     }
 
+    #[allow(dead_code)]
     pub fn from_numstring(s: &str) -> Result<MemoryCell, bigdecimal::ParseBigDecimalError> {
         MemoryCell::from_string_radix(s, 10)
     }
 
-    // pub fn as_bytes(&self) -> Option<&[u8]> {
-    //     match self {
-    //         &MemoryCell::Num(..) => None,
-    //         &MemoryCell::Str(ref s) => Some(s),
-    //     }
-    // }
+    #[allow(dead_code)]
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            &MemoryCell::Num(..) => None,
+            &MemoryCell::Str(ref s) => Some(s),
+        }
+    }
 
-    // pub fn num(self) -> Option<BigDecimal> {
-    //     match self {
-    //         MemoryCell::Str(..) => None,
-    //         MemoryCell::Num(n) => Some(n),
-    //     }
-    // }
+    #[allow(dead_code)]
+    pub fn num(self) -> Option<BigDecimal> {
+        match self {
+            MemoryCell::Str(..) => None,
+            MemoryCell::Num(n) => Some(n),
+        }
+    }
 
+    #[allow(dead_code)]
     pub fn to_str_radix(&self, radix: u32) -> String {
         match self {
             &MemoryCell::Num(ref n) => to_string_radix(n, radix),
@@ -60,6 +65,7 @@ impl MemoryCell {
         }
     }
 
+    #[allow(dead_code)]
     pub fn apply_num<F>(&mut self, f: F) -> Result<Self, DCError>
     where
         F: Fn(&BigDecimal) -> BigDecimal,
@@ -322,6 +328,7 @@ impl DCStack {
         }
     }
 
+    #[allow(dead_code)]
     pub fn apply_tos_num<F>(&mut self, f: F) -> Result<(), DCError>
     where
         F: Fn(&BigDecimal) -> BigDecimal,
