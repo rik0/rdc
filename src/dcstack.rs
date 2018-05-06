@@ -412,6 +412,21 @@ impl DCStack {
         Ok(self.push(tos))
     }
 
+    pub fn swap(&mut self) -> Result<(), DCError> {
+        let former_tos = self.pop()?;
+        match self.pop() {
+            Ok(memory_cell) => {
+                self.stack.push(former_tos);
+                self.stack.push(memory_cell);
+                Ok(())
+            }
+            Err(stack_error) => {
+                self.stack.push(former_tos);
+                Err(stack_error)
+            }
+        }
+    }
+
     // pub fn appy_num<F, T>(&mut self, f: F) -> Result<T, DCError>
     // where
     //     F: Fn(&mut BigDecimal) -> T,
@@ -468,6 +483,30 @@ fn test_dup() {
 fn test_dup_empty() {
     let mut s = DCStack::new();
     assert_eq!(Err(DCError::StackEmpty), s.dup());
+}
+
+#[test]
+fn test_swap_empty() {
+    let mut s = DCStack::new();
+    assert_eq!(Err(DCError::StackEmpty), s.swap());
+}
+
+#[test]
+fn test_swap_one() {
+    let mut s = dcstack_num!(10);
+    assert_eq!(Err(DCError::StackEmpty), s.swap());
+}
+
+#[test]
+fn test_swap() {
+    use bigdecimal::ToPrimitive;
+    let mut s = dcstack_num!(10, 20);
+    assert_eq!(Ok(()), s.swap());
+    assert_eq!(2, s.len());
+    let a = s.pop_num().unwrap();
+    let b = s.pop_num().unwrap();
+    assert_eq!(20, ToPrimitive::to_u64(&b).unwrap());
+    assert_eq!(10, ToPrimitive::to_u64(&a).unwrap());
 }
 
 #[test]

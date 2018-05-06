@@ -93,3 +93,7 @@ test_dc![mod_; "10 20 % p"];
 
 test_dc![dup;"10df"];
 test_dc![dup_empty;"df"];
+
+test_dc![swap_empty;"r"];
+test_dc![swap_one;"10rf"];
+test_dc![swap;"10 20 rf"];

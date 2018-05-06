@@ -199,7 +199,7 @@ where
             // stack
             &Instruction::Clear => Err(VMError::NotImplemented),
             &Instruction::Dup => Ok(self.stack.dup()?),
-            &Instruction::Swap => Err(VMError::NotImplemented),
+            &Instruction::Swap => Ok(self.stack.swap()?),
             // register
             &Instruction::RegisterOperation { .. } => Err(VMError::NotImplemented),
             // parameters
@@ -494,3 +494,5 @@ test_exec![sub; b"10 20 - p";"-10\n"];
 test_exec![mul; b"10 20 * p";"200\n"];
 test_exec![div; b"10 20 / p";"0\n"];
 test_exec![mod_; b"10 20 % p";"10\n"];
+
+test_exec![swap;b"10 20 rf";"10\n20\n"];
