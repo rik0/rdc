@@ -122,6 +122,13 @@ macro_rules! push_and_toplevel {
     );
 }
 
+// TODO since apparently dc does process output fully even with parse errors (which are rare)
+// we need to give ParserError some context to contain potentially the remaining characters to allow
+// to restart parsing from those. See for example:
+// dc -e '10]20f'
+// dc: ']' (0135) unimplemented
+// 20
+// 10
 pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
     let mut state = ParserState::TopLevel;
     let mut instructions = Vec::new();
