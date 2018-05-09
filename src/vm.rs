@@ -36,8 +36,9 @@ static NOT_IMPLEMENTED: &'static str = "not implemented";
 static TERMINATING_RETURN: &'static str = "terminating return";
 static TERMINATING_RETURN_ENCLOSING: &'static str = "terminating return enclosing";
 static NON_TERMINATING_RETURN: &'static str = "non terminating return";
+static BAD_Q_NUMBER: &'static str = "Q command requires a number >= 1";
 
-#[cfg(target_os="macos")]
+#[cfg(not(target_os="macos"))]
 static BAD_Q_NUMBER: &'static str = "Q command requires a number >= 1";
 
 impl VMState {
