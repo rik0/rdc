@@ -121,8 +121,8 @@ pub enum VMError {
 impl fmt::Display for VMError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let type_ = match self {
-            VMError::FmtError(..) => "fmt error",
-            VMError::IoError(..) => "io error",
+            &VMError::FmtError(..) => "fmt error",
+            &VMError::IoError(..) => "io error",
         };
         write!(f, "{} {}", type_, self.description())?;
         Ok(())
