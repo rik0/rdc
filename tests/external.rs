@@ -84,6 +84,24 @@ fn test() {
     );
 }
 
+#[test]
+#[allow(non_snake_case)]
+fn test_huge_Q() {
+    let stdout: Vec<u8> = Vec::new();
+    let stderr: Vec<u8> = Vec::new();
+    let programs = vec!["371946139746397463926439726439764969639436932476233984734843946937638974648736487643827 Q 10p"];
+    let expected = run_dc(programs.clone()).expect("process error");
+    let dc_args = prepare_arguments(programs);
+    let (actual_output, actual_error) = rdc::dc(dc_args.into_iter(), stderr, stdout);
+    assert_eq!(
+            String::from_utf8(expected.stdout).expect("utf error in system dc output"),
+            String::from_utf8(actual_output).expect("utf8 output"),
+    );
+    // under some systems, such large numbers 
+    assert!(!actual_error.is_empty());
+    assert!(expected.stderr.ends_with(&actual_error))
+}
+
 test_dc![_10p; "10p"];
 test_dc![add; "10 20 + p"];
 test_dc![sub; "10 20 - p"];
@@ -106,5 +124,3 @@ test_dc![no_quit_macro_depth;"[qp][x]x10p"];
 test_dc![Quit;"[Qp]x10p"];
 test_dc![no_Quit_macro_depth;"[Qp][x]x10p"];
 test_dc![Quit_inconsistency;"1Q10p"];
-
-test_dc![huge_q2;"371946139746397463926439726439764969639436932476233984734843946937638974648736487643827 Q 10p"];

@@ -33,10 +33,12 @@ static INVALID_INPUT_RADIX: &'static str = "invalid input radix";
 static INVALID_OUTPUT_RADIX: &'static str = "invalid output radix";
 static INVALID_PRECISION: &'static str = "invalid precision";
 static NOT_IMPLEMENTED: &'static str = "not implemented";
-static BAD_Q_NUMBER: &'static str = "Q command requires a number >= 1";
 static TERMINATING_RETURN: &'static str = "terminating return";
 static TERMINATING_RETURN_ENCLOSING: &'static str = "terminating return enclosing";
 static NON_TERMINATING_RETURN: &'static str = "non terminating return";
+
+#[cfg(target_os="macos")]
+static BAD_Q_NUMBER: &'static str = "Q command requires a number >= 1";
 
 impl VMState {
     fn message(&self) -> &'static str {
