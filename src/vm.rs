@@ -183,12 +183,6 @@ impl ReturnState {
             &ReturnState::NonTerminatingReturn(_n) => true,
         }
     }
-
-    fn terminates_and_update(&mut self) -> bool {
-        let result = self.terminates_exec();
-        *self = self.next();
-        result
-    }
 }
 
 impl Default for ReturnState {
