@@ -7,3 +7,7 @@ authors = ["Enrico Franchi <enrico.franchi@gmail.com>"]
 num = "0.1.42"
 num-bigint = "0.1"
 bigdecimal = "0.0.11"
+
+[features]
+default = []
+tracevm = []

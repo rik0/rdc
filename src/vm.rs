@@ -1,67 +1,146 @@
-use std::fmt;
-use std::io;
+use std::convert::From;
 use std::error;
 use std::error::Error;
-use std::convert::From;
-use std::ops::*;
+use std::fmt;
+use std::io;
 use std::io::prelude::*;
+use std::ops::*;
 
 use bigdecimal::BigDecimal;
-use bigdecimal::ToPrimitive;
 use bigdecimal::FromPrimitive;
+use bigdecimal::ToPrimitive;
 
-use parse;
 use dcstack;
 use instructions::*;
+use parse;
 
 #[derive(Debug)]
-pub enum VMError {
+pub enum VMState {
+    Continue,
     StackError(dcstack::DCError),
-    FmtError(fmt::Error),
-    IoError(::std::io::Error),
     InvalidInputRadix,
     InvalidOutputRadix,
     InvalidPrecision,
+    InvalidCallStackOperation,
     NotImplemented,
+    TerminatingReturn,
+    TerminatingReturnEnclosing,
+    NonTerminatingReturn(u64),
 }
 
+static CONTINUE: &'static str = "continue";
 static INVALID_INPUT_RADIX: &'static str = "invalid input radix";
 static INVALID_OUTPUT_RADIX: &'static str = "invalid output radix";
 static INVALID_PRECISION: &'static str = "invalid precision";
 static NOT_IMPLEMENTED: &'static str = "not implemented";
+static BAD_Q_NUMBER: &'static str = "Q command requires a number >= 1";
+static TERMINATING_RETURN: &'static str = "terminating return";
+static TERMINATING_RETURN_ENCLOSING: &'static str = "terminating return enclosing";
+static NON_TERMINATING_RETURN: &'static str = "non terminating return";
 
-impl VMError {
-    fn message(&self) -> &str {
+impl VMState {
+    fn message(&self) -> &'static str {
         match self {
-            &VMError::InvalidInputRadix => &INVALID_INPUT_RADIX,
-            &VMError::InvalidOutputRadix => &INVALID_OUTPUT_RADIX,
-            &VMError::InvalidPrecision => &INVALID_PRECISION,
-            &VMError::NotImplemented => &NOT_IMPLEMENTED,
-            &VMError::StackError(dcerror) => dcerror.message(),
-            // TODO ugly but it works: display should only be a simple message and we should
-            // do the interesting stuff in fmt, which can allocate memory more easily
-            &VMError::FmtError(ref fmterror) => &Box::new(fmterror.description()),
-            &VMError::IoError(ref ioerror) => &Box::new(ioerror.description()),
+            &VMState::Continue => &CONTINUE,
+            &VMState::InvalidInputRadix => &INVALID_INPUT_RADIX,
+            &VMState::InvalidOutputRadix => &INVALID_OUTPUT_RADIX,
+            &VMState::InvalidPrecision => &INVALID_PRECISION,
+            &VMState::NotImplemented => &NOT_IMPLEMENTED,
+            &VMState::InvalidCallStackOperation => &BAD_Q_NUMBER,
+            &VMState::TerminatingReturn => &TERMINATING_RETURN,
+            &VMState::TerminatingReturnEnclosing => &TERMINATING_RETURN_ENCLOSING,
+            &VMState::NonTerminatingReturn(..) => &NON_TERMINATING_RETURN,
+            &VMState::StackError(dcerror) => dcerror.message(),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn stack_unwind(&self) -> u64 {
+        match self {
+            &VMState::NonTerminatingReturn(n) => n,
+            &VMState::TerminatingReturnEnclosing => 1,
+            &VMState::TerminatingReturn => 2,
+            _other => 0,
+        }
+    }
+
+    #[cfg(test)]
+    fn is_ok(&self) -> bool {
+        match self {
+            &VMState::Continue
+            | &VMState::NonTerminatingReturn(..)
+            | &VMState::TerminatingReturnEnclosing
+            | &VMState::TerminatingReturn => true,
+            _s => false,
+        }
+    }
+
+    #[cfg(test)]
+    fn is_err(&self) -> bool {
+        !self.is_ok()
+    }
+}
+
+impl From<dcstack::DCError> for VMState {
+    fn from(error: dcstack::DCError) -> VMState {
+        VMState::StackError(error)
+    }
+}
+
+impl From<Result<(), dcstack::DCError>> for VMState {
+    fn from(result: Result<(), dcstack::DCError>) -> VMState {
+        match result {
+            Ok(()) => VMState::Continue,
+            Err(stack_error) => VMState::StackError(stack_error),
         }
     }
 }
 
-impl fmt::Display for VMError {
+impl From<Result<VMState, dcstack::DCError>> for VMState {
+    fn from(result: Result<VMState, dcstack::DCError>) -> VMState {
+        match result {
+            Ok(state) => state,
+            Err(stack_error) => VMState::StackError(stack_error),
+        }
+    }
+}
+
+impl fmt::Display for VMState {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}", self.message())?;
         Ok(())
     }
 }
 
-impl error::Error for VMError {
-    fn description(&self) -> &str {
-        self.message()
+#[derive(Debug)]
+pub enum VMError {
+    FmtError(fmt::Error),
+    IoError(::std::io::Error),
+}
+
+impl fmt::Display for VMError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let type_ = match self {
+            VMError::FmtError(..) => "fmt error",
+            VMError::IoError(..) => "io error",
+        };
+        write!(f, "{} {}", type_, self.description())?;
+        Ok(())
     }
 }
 
-impl From<dcstack::DCError> for VMError {
-    fn from(error: dcstack::DCError) -> VMError {
-        VMError::StackError(error)
+impl error::Error for VMError {
+    fn cause(&self) -> Option<&Error> {
+        match self {
+            &VMError::FmtError(ref error) => Some(error),
+            &VMError::IoError(ref error) => Some(error),
+        }
+    }
+
+    fn description(&self) -> &str {
+        self.cause()
+            .map(Error::description)
+            .expect("there is always a cause")
     }
 }
 
@@ -77,7 +156,82 @@ impl From<::std::io::Error> for VMError {
     }
 }
 
-pub struct VM<W: Write, WE: Write>
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ReturnState {
+    Done,
+    TerminatingReturn,
+    TerminatingReturnEnclosing,
+    NonTerminatingReturn(u64),
+}
+
+impl ReturnState {
+    fn next(&self) -> Self {
+        match self {
+            &ReturnState::Done => ReturnState::Done,
+            &ReturnState::TerminatingReturn => ReturnState::TerminatingReturnEnclosing,
+            &ReturnState::TerminatingReturnEnclosing => ReturnState::Done,
+            &ReturnState::NonTerminatingReturn(0) => ReturnState::Done,
+            &ReturnState::NonTerminatingReturn(n) => ReturnState::NonTerminatingReturn(n - 1),
+        }
+    }
+
+    fn terminates_exec(&self) -> bool {
+        match self {
+            &ReturnState::Done => false,
+            &ReturnState::TerminatingReturn => true,
+            &ReturnState::TerminatingReturnEnclosing => true,
+            &ReturnState::NonTerminatingReturn(_n) => true,
+        }
+    }
+
+    fn terminates_and_update(&mut self) -> bool {
+        let result = self.terminates_exec();
+        *self = self.next();
+        result
+    }
+}
+
+impl Default for ReturnState {
+    fn default() -> Self {
+        return ReturnState::Done;
+    }
+}
+
+impl fmt::Display for ReturnState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        Ok(match self {
+            &ReturnState::Done => f.write_str("Done"),
+            &ReturnState::TerminatingReturn => f.write_str("TerminatingReturn"),
+            &ReturnState::TerminatingReturnEnclosing => f.write_str("TerminatingReturnEnclosing"),
+            &ReturnState::NonTerminatingReturn(n) => write!(f, "NonTerminatingReturn({})", n),
+        }?)
+    }
+}
+
+impl From<VMState> for ReturnState {
+    fn from(vm_state: VMState) -> ReturnState{
+        match vm_state {
+            VMState::NonTerminatingReturn(n) => ReturnState::NonTerminatingReturn(n),
+            VMState::TerminatingReturn => ReturnState::TerminatingReturn,
+            VMState::TerminatingReturnEnclosing => ReturnState::TerminatingReturnEnclosing,
+            _other => ReturnState::Done,
+        }
+    }
+}
+
+impl From<ReturnState> for VMState {
+    fn from(return_state: ReturnState) -> VMState {
+        match return_state {
+            ReturnState::Done => VMState::Continue,
+            ReturnState::NonTerminatingReturn(n) => VMState::NonTerminatingReturn(n),
+            ReturnState::TerminatingReturn => VMState::TerminatingReturn,
+            ReturnState::TerminatingReturnEnclosing => VMState::TerminatingReturnEnclosing,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct VM<W, WE>
 where
     W: Write,
     WE: Write,
@@ -88,12 +242,35 @@ where
     precision: u64,    // > 0, always in decimal
     sink: W,
     error_sink: WE,
+    macro_level: u64,
 }
 
 macro_rules! bin_op {
-    ($dcstack:expr; $e: expr) => ({
-       Ok($dcstack.binary_apply_and_consume_tos($e)?)
-    });
+    ($dcstack:expr; $e:expr) => {{
+        if let Err(stack_error) = $dcstack.binary_apply_and_consume_tos($e) {
+            VMState::StackError(stack_error)
+        } else {
+            VMState::Continue
+        }
+    }};
+}
+
+impl<W, WE> Default for VM<W, WE>
+where
+    W: Write + Default,
+    WE: Write + Default,
+{
+    fn default() -> VM<W, WE> {
+        VM {
+            stack: dcstack::DCStack::new(),
+            input_radix: 10,
+            output_radix: 10,
+            precision: 0,
+            sink: W::default(),
+            error_sink: WE::default(),
+            macro_level: 0,
+        }
+    }
 }
 
 impl<W, WE> VM<W, WE>
@@ -109,6 +286,7 @@ where
             precision: 0,
             sink: w,
             error_sink: esink,
+            macro_level: 0,
         }
     }
 
@@ -116,26 +294,84 @@ where
         (self.sink, self.error_sink)
     }
 
-    pub fn eval(&mut self, instructions: &[Instruction]) -> Result<(), io::Error> {
-        for instruction in instructions {
-            match self.eval_instruction(instruction) {
-                Err(VMError::IoError(ioerror)) => return Err(ioerror),
-                Err(error) => writeln!(self.error_sink, "dc: {}", error)?,
-                Ok(..) => {}
-            }
+    fn trace<T>(&self, where_: &str, i: &T) -> Result<(), io::Error>
+    where
+        T: fmt::Display,
+    {
+        if cfg!(feature = "tracevm") {
+            let out = ::std::io::stderr();
+            writeln!(
+                out.lock(),
+                "{} {} {} i:{} o:{} k:{} m:{}",
+                where_,
+                i,
+                self.stack,
+                self.input_radix,
+                self.output_radix,
+                self.precision,
+                self.macro_level,
+            )?;
+            writeln!(out.lock(), "{:?}", ReturnState::NonTerminatingReturn(1))?;
         }
         Ok(())
     }
 
-    pub fn execute(&mut self, program_text: &[u8]) -> Result<(), io::Error> {
-        match parse::parse(program_text) {
-            Ok(instructions) => Ok(self.eval(&instructions)?),
-            Err(parse_error) => {
-                self.eval(&parse_error.instructions)?;
-                writeln!(self.error_sink, "dc: {}", parse_error)?;
-                self.execute(parse_error.unparsed)
-            }
+    fn eval(&mut self, program: &Program) -> Result<ReturnState, io::Error> {
+        for instruction in &program.instructions {
+            self.trace("__enter_eval__", instruction)?;
+            match self.eval_instruction(&instruction) {
+                Err(VMError::IoError(ioerror)) => {
+                    self.trace("__exit_eval__ ioerror", instruction)?;
+                    return Err(ioerror);
+                }
+                Err(error) => {
+                    self.trace("__exit_eval__ error", instruction)?;
+                    writeln!(self.error_sink, "dc: {}", error)?;
+                }
+                Ok(vm_state) => {
+                    self.trace("__exit_eval__", instruction)?;
+                    match vm_state {
+                        VMState::Continue => continue,
+                        r @ VMState::TerminatingReturn| r @ VMState::TerminatingReturnEnclosing| r@ VMState::NonTerminatingReturn(..) => {
+                            return Ok(ReturnState::from(r))
+                        }
+                        error => {
+                            // we do not really need to go out here
+                            writeln!(self.error_sink, "dc: {}", error)?;
+                        }
+                    }
+                }
+            };
         }
+        Ok(ReturnState::Done)
+    }
+
+    pub fn execute(&mut self, program_text: &[u8]) -> Result<ReturnState, io::Error> {
+        let res = match parse::parse(program_text) {
+            Ok(program) => {
+                self.trace("__enter_execute__", &program)?;
+                self.eval(&program)?
+            }
+            Err(parse_error) => {
+                self.trace("__enter_execute__ parse error", &parse_error.program)?;
+                let eval_res = self.eval(&parse_error.program)?;
+                if eval_res.terminates_exec() {
+                    eval_res
+                } else {
+                    writeln!(self.error_sink, "dc: {}", parse_error)?;
+                    self.execute(parse_error.unparsed)?
+                }
+            }
+        };
+        self.trace("__exit_execute__", &UTF8Adapter { program_text })?;
+        Ok(res)
+    }
+
+    fn execute_macro(&mut self, program_text: &[u8]) -> Result<ReturnState, io::Error> {
+        self.macro_level += 1; // todo make it into a RAI counter
+        let result_status = self.execute(program_text)?;
+        self.macro_level -= 1; // bug without the counter
+        Ok(result_status.next())
     }
 
     #[inline]
@@ -143,37 +379,43 @@ where
         self.precision as i64
     }
 
-    fn eval_instruction(&mut self, instruction: &Instruction) -> Result<(), VMError> {
-        match instruction {
-            &Instruction::Nop => Ok(()),
+    fn eval_instruction(&mut self, instruction: &Instruction) -> Result<VMState, VMError> {
+        let state = match instruction {
+            &Instruction::Nop => VMState::Continue,
             &Instruction::Num(integer, fraction) => {
-                self.stack
-                    .push_bytes_as_num(integer, fraction, self.input_radix)?;
-                Ok(())
+                if let Err(stack_error) =
+                    self.stack
+                        .push_bytes_as_num(integer, fraction, self.input_radix)
+                {
+                    VMState::StackError(stack_error)
+                } else {
+                    VMState::Continue
+                }
             }
             &Instruction::Str(text) => {
                 self.stack.push_str(text);
-                Ok(())
+                VMState::Continue
             }
             // print
-            &Instruction::PrintLN => {
-                let tos = self.stack.peek()?;
-                Ok(writeln!(
-                    self.sink,
-                    "{}",
-                    tos.to_str_radix(self.output_radix)
-                )?)
+            &Instruction::PrintLN => match self.stack.peek() {
+                Ok(tos) => {
+                    writeln!(self.sink, "{}", tos.to_str_radix(self.output_radix))?;
+                    VMState::Continue
+                }
+                Err(stack_error) => VMState::StackError(stack_error),
+            },
+            &Instruction::PrintPop => match self.stack.pop() {
+                Ok(tos) => {
+                    writeln!(self.sink, "{}", tos.to_str_radix(self.output_radix))?;
+                    VMState::Continue
+                }
+                Err(stack_error) => VMState::StackError(stack_error),
+            },
+            &Instruction::PrettyPrint => VMState::NotImplemented,
+            &Instruction::PrintStack => {
+                self.stack.write_to(&mut self.sink, self.output_radix)?;
+                VMState::Continue
             }
-            &Instruction::PrintPop => {
-                let tos = self.stack.pop()?;
-                Ok(writeln!(
-                    self.sink,
-                    "{}",
-                    tos.to_str_radix(self.output_radix)
-                )?)
-            }
-            &Instruction::PrettyPrint => Err(VMError::NotImplemented),
-            &Instruction::PrintStack => Ok(self.stack.write_to(&mut self.sink, self.output_radix)?),
             // arithmetic
             &Instruction::Add => bin_op![self.stack; BigDecimal::add_assign],
             &Instruction::Sub => bin_op![self.stack; BigDecimal::sub_assign],
@@ -183,144 +425,155 @@ where
                 bin_op![self.stack; |dest, other| {*dest = &*dest / other; *dest = dest.with_scale(precision)}]
             }
             &Instruction::Mod => bin_op![self.stack; |dest, other| *dest = &*dest % other],
-            &Instruction::Divmod => Err(VMError::NotImplemented),
-            &Instruction::Exp => Err(VMError::NotImplemented),
-            &Instruction::Modexp => Err(VMError::NotImplemented),
+            &Instruction::Divmod => VMState::NotImplemented,
+            &Instruction::Exp => VMState::NotImplemented,
+            &Instruction::Modexp => VMState::NotImplemented,
             &Instruction::Sqrt => {
                 // TODO: this implementation is buggy as it goes through fp
                 let precision = self.precision_i64();
-                Ok(self.stack.apply_tos_num_opt(|n| {
+                VMState::from(self.stack.apply_tos_num_opt(|n| {
                     ToPrimitive::to_f64(n)
                         .map(f64::sqrt)
                         .and_then(BigDecimal::from_f64)
                         .map(|n| n.with_scale(precision))
-                })?)
+                }))
             }
             // stack
-            &Instruction::Clear => Ok(self.stack.clear()?),
-            &Instruction::Dup => Ok(self.stack.dup()?),
-            &Instruction::Swap => Ok(self.stack.swap()?),
+            &Instruction::Clear => VMState::from(self.stack.clear()),
+            &Instruction::Dup => VMState::from(self.stack.dup()),
+            &Instruction::Swap => VMState::from(self.stack.swap()),
             // register
-            &Instruction::RegisterOperation { .. } => Err(VMError::NotImplemented),
+            &Instruction::RegisterOperation { .. } => VMState::NotImplemented,
             // parameters
             &Instruction::SetInputRadix => {
-                let n: BigDecimal = self.stack.pop_num()?;
-                self.set_input_radix(n)
+                VMState::from(self.stack.pop_num().map(|n| self.set_input_radix(n)))
             }
             &Instruction::GetInputRadix => {
                 self.stack.push_num(self.input_radix);
-                Ok(())
+                VMState::Continue
             }
             &Instruction::SetOutputRadix => {
-                let n: BigDecimal = self.stack.pop_num()?;
-                self.set_output_radix(n)
+                VMState::from(self.stack.pop_num().map(|n| self.set_output_radix(n)))
             }
             &Instruction::GetOutputRadix => {
                 self.stack.push_num(self.output_radix);
-                Ok(())
+                VMState::Continue
             }
             &Instruction::SetPrecision => {
-                let n: BigDecimal = self.stack.pop_num()?;
-                self.set_precision(n)
+                VMState::from(self.stack.pop_num().map(|n| self.set_precision(n)))
             }
             &Instruction::GetPrecision => {
                 self.stack.push_num(self.precision);
-                Ok(())
+                VMState::Continue
             }
             // string
-            &Instruction::OpToString => Err(VMError::NotImplemented),
-            &Instruction::ExecuteTos => {
-                let bytes = self.stack.pop_str()?;
-                Ok(self.execute(&bytes)?)
+            &Instruction::OpToString => VMState::NotImplemented,
+            &Instruction::ExecuteTos => match self.stack.pop_str() {
+                Ok(bytes) => {
+                    self.execute_macro(&bytes)?.into()
+                }
+                Err(stack_error) => VMState::StackError(stack_error),
+            },
+            &Instruction::ExecuteInput => VMState::NotImplemented,
+            &Instruction::ReturnCaller => {
+                VMState::TerminatingReturn
             }
-            &Instruction::ExecuteInput => Err(VMError::NotImplemented),
-            &Instruction::ReturnN => Err(VMError::NotImplemented),
-            &Instruction::ReturnCaller => Err(VMError::NotImplemented),
+            &Instruction::ReturnN => {
+                match self.stack.pop_num(){
+                    Ok(levels) => {
+                        if let Some(levels) = levels.to_u64() {
+                            VMState::NonTerminatingReturn(levels)
+                        } else {
+                            VMState::InvalidCallStackOperation
+                        }
+                    }
+                    Err(stack_error) => VMState::StackError(stack_error)
+                }
+            }
             // status enquiry
-            &Instruction::Digits => Err(VMError::NotImplemented),
-            &Instruction::FractionDigits => Err(VMError::NotImplemented),
+            &Instruction::Digits => VMState::NotImplemented,
+            &Instruction::FractionDigits => VMState::NotImplemented,
             &Instruction::StackDepth => {
                 let len = self.stack.len();
                 self.stack.push_num(len as u64);
-                Ok(())
+                VMState::Continue
             }
             // miscellaneous
-            &Instruction::System(..) => Err(VMError::NotImplemented),
-            &Instruction::Comment(..) => Ok(()),
-        }
+            &Instruction::System(..) => VMState::NotImplemented,
+            &Instruction::Comment(..) => VMState::Continue,
+        };
+        Ok(state)
     }
 
-    fn set_input_radix(&mut self, radix: BigDecimal) -> Result<(), VMError> {
+    fn set_input_radix(&mut self, radix: BigDecimal) -> VMState {
         let (n, scale) = radix.as_bigint_and_exponent();
         if scale != 0 {
-            return Err(VMError::InvalidInputRadix);
+            return VMState::InvalidInputRadix;
         }
 
-        n.to_u32()
-            .and_then(|n| {
+        match n.to_u32() {
+            Some(n) => {
                 if n < 2 || n > 16 {
-                    None
+                    VMState::InvalidInputRadix
                 } else {
                     self.input_radix = n;
-                    Some(())
+                    VMState::Continue
                 }
-            })
-            .ok_or(VMError::InvalidInputRadix)
+            }
+            None => VMState::InvalidInputRadix,
+        }
     }
 
-    fn set_output_radix(&mut self, radix: BigDecimal) -> Result<(), VMError> {
+    fn set_output_radix(&mut self, radix: BigDecimal) -> VMState {
         let (n, scale) = radix.as_bigint_and_exponent();
         if scale != 0 {
-            return Err(VMError::InvalidOutputRadix);
+            return VMState::InvalidOutputRadix;
         }
 
-        n.to_u32()
-            .and_then(|n| {
-                if n < 2 {
-                    None
+        match n.to_u32() {
+            Some(n) => {
+                if n < 2 || n > 16 {
+                    VMState::InvalidOutputRadix
                 } else {
                     self.output_radix = n;
-                    Some(())
+                    VMState::Continue
                 }
-            })
-            .ok_or(VMError::InvalidOutputRadix)
+            }
+            None => VMState::InvalidOutputRadix,
+        }
     }
 
-    fn set_precision(&mut self, precision: BigDecimal) -> Result<(), VMError> {
+    fn set_precision(&mut self, precision: BigDecimal) -> VMState {
         if let Some(value) = precision.to_u64() {
             if value >= 2 {
                 self.precision = value;
-                return Ok(());
+                return VMState::Continue;
             }
         }
-        Err(VMError::InvalidPrecision)
+        VMState::InvalidPrecision
     }
 }
 
-#[cfg(test)]
-macro_rules! empty_test_vm {
-    () => (
-        VM {
-            stack: dcstack::DCStack::new(),
-            input_radix: 10,
-            output_radix: 10,
-            precision: 0,
-            sink: &mut Vec::new(),
-            error_sink: &mut Vec::new(),
+struct UTF8Adapter<'a> {
+    program_text: &'a [u8],
+}
+
+impl<'a> fmt::Display for UTF8Adapter<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        use std::fmt::Write;
+        for ch in self.program_text {
+            f.write_char(*ch as char)?
         }
-    );
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 macro_rules! test_vm_num {
     ($ ( $ x : expr ) , * ) => (
-        VM {
+        InMemoryVM {
             stack: dcstack_num![ $( $x ),* ],
-            input_radix: 10,
-            output_radix: 10,
-            precision: 0,
-            sink: &mut Vec::new(),
-            error_sink: &mut Vec::new(),
+            .. InMemoryVM::default()
         }
     );
 }
@@ -328,44 +581,43 @@ macro_rules! test_vm_num {
 #[cfg(test)]
 macro_rules! test_vm {
     ($ ( $ x : expr ) , * ) => (
-        VM {
+        InMemoryVM {
             stack: dcstack![ $( $x ),* ],
-            input_radix: 10,
-            output_radix: 10,
-            precision: 0,
-            sink: &mut Vec::new(),
-            error_sink: &mut Vec::new(),
+            .. InMemoryVM::default()
         }
     );
 }
 
+#[cfg(test)]
+type InMemoryVM = VM<Vec<u8>, Vec<u8>>;
+
 #[test]
 fn test_input_radix() {
-    let mut vm = empty_test_vm!();
+    let mut vm = InMemoryVM::default();
     assert!(vm.set_input_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_input_radix_fail() {
-    let mut vm = empty_test_vm!();
+    let mut vm = InMemoryVM::default();
     assert!(vm.set_input_radix(BigDecimal::from(50)).is_err());
 }
 
 #[test]
 fn test_output_radix() {
-    let mut vm = empty_test_vm!();
+    let mut vm = InMemoryVM::default();
     assert!(vm.set_output_radix(BigDecimal::from(10)).is_ok());
 }
 
 #[test]
 fn test_output_radix_fail() {
-    let mut vm = empty_test_vm!();
+    let mut vm = InMemoryVM::default();
     assert!(vm.set_output_radix(BigDecimal::from(1)).is_err());
 }
 
 #[test]
 fn test_precision() {
-    let mut vm = empty_test_vm!();
+    let mut vm = InMemoryVM::default();
     assert!(vm.set_precision(BigDecimal::from(10)).is_ok());
 }
 
@@ -385,7 +637,7 @@ fn test_add_empty() {
     let mut vm = test_vm_num!();
     let res = vm.eval_instruction(&Instruction::Add);
     match res {
-        Err(VMError::StackError(dcstack::DCError::StackEmpty)) => {}
+        Ok(VMState::StackError(dcstack::DCError::StackEmpty)) => {}
         _ => assert!(false),
     }
 }
@@ -398,7 +650,7 @@ fn test_add_tos_not_num() {
     );
     let res = vm.eval_instruction(&Instruction::Add);
     match res {
-        Err(VMError::StackError(dcstack::DCError::NonNumericValue)) => {}
+        Ok(VMState::StackError(dcstack::DCError::NonNumericValue)) => {}
         _ => assert!(false),
     }
     assert!(vm.stack.len() == 2);
@@ -412,7 +664,7 @@ fn test_add_other_not_num() {
     );
     let res = vm.eval_instruction(&Instruction::Add);
     match res {
-        Err(VMError::StackError(dcstack::DCError::NonNumericValue)) => {}
+        Ok(VMState::StackError(dcstack::DCError::NonNumericValue)) => {}
         _ => assert!(false),
     }
     assert!(vm.stack.len() == 2);
@@ -420,45 +672,45 @@ fn test_add_other_not_num() {
 
 #[test]
 fn test_exec() {
-    let mut output: Vec<u8> = Vec::new();
-    let mut err: Vec<u8> = Vec::new();
-    {
-        let mut vm = VM {
-            stack: dcstack::DCStack::new(),
-            input_radix: 10,
-            output_radix: 10,
-            precision: 0,
-            sink: &mut output,
-            error_sink: &mut err,
-        };
-        assert!(vm.execute(b"110.0[p]x").is_ok())
-    }
+    let mut vm = VM::default();
+    assert!(vm.execute(b"110.0[p]x").is_ok());
+    let (actual_output, actual_error) = vm.sinks();
 
-    assert_eq!(Vec::from("110.0\n"), output);
+    assert_eq!(
+        ("110.0\n".to_string(), String::new()),
+        (
+            String::from_utf8(actual_output).expect("utf8 output"),
+            String::from_utf8(actual_error).expect("utf8 error")
+        ),
+    );
 }
 
 macro_rules! test_exec {
-    ($name:ident; $program:expr; $expected_output:expr) => (
+    ($name:ident; $program:expr; $expected_output:expr) => {
         #[test]
         fn $name() {
-            let mut output: Vec<u8> = Vec::new();
-            let mut error: Vec<u8> = Vec::new();
-            {
-                let mut vm = VM {
-                    stack: dcstack::DCStack::new(),
-                    input_radix: 10,
-                    output_radix: 10,
-                    precision: 0,
-                    sink: &mut output,
-                    error_sink: &mut error,
-                };
-                println!("{:?}", parse::parse($program));
-                assert!(vm.execute($program).is_ok())
+            let program = $program;
+            let mut vm = VM::default();
+            match parse::parse(program) {
+                Err(error) => {
+                    println!("parse error {:?}", error);
+                    assert!(false);
+                }
+                Ok(program) => println!("{}", program),
             }
 
-            assert_eq!((Vec::from($expected_output), String::new()), (output, String::from_utf8(error).unwrap()));
+            assert!(vm.execute(program).is_ok());
+            let (actual_output, actual_error) = vm.sinks();
+
+            assert_eq!(
+                (String::from($expected_output), String::new()),
+                (
+                    String::from_utf8(actual_output).expect("utf8 output"),
+                    String::from_utf8(actual_error).expect("utf8 error")
+                ),
+            );
         }
-    )
+    };
 }
 
 test_exec![test_num;b"10";""];
@@ -498,4 +750,10 @@ test_exec![mod_; b"10 20 % p";"10\n"];
 test_exec![swap;b"10 20 rf";"10\n20\n"];
 
 test_exec![clear;b"10cf";""];
-test_exec![clear_empry;b"cf";""];
+test_exec![clear_empty;b"cf";""];
+
+test_exec![quit_now;b"q10p"; ""];
+test_exec![quit_now1;b"q"; ""];
+test_exec![quit;b"[qp]x10p"; ""];
+test_exec![quit2;b"[qp]x"; ""];
+test_exec![no_quit_macro_depth;b"[qp][x]x10p";"10\n"];

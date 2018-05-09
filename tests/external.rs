@@ -1,8 +1,8 @@
 extern crate rdc;
 
+use std::ffi::OsStr;
 use std::io;
 use std::process;
-use std::ffi::OsStr;
 
 use std::process::Command;
 
@@ -40,8 +40,9 @@ where
 }
 
 macro_rules! test_dc {
-    ($name:ident; $program:expr) => (
+    ($name:ident; $program:expr) => {
         #[test]
+        #[allow(non_snake_case)]
         fn $name() {
             let stdout: Vec<u8> = Vec::new();
             let stderr: Vec<u8> = Vec::new();
@@ -60,7 +61,7 @@ macro_rules! test_dc {
                 ),
             );
         }
-    )
+    };
 }
 
 #[test]
@@ -99,3 +100,10 @@ test_dc![swap;"10 20 rf"];
 
 test_dc![clear;"10cf"];
 test_dc![clear_empty;"cf"];
+
+test_dc![quit;"[qp]x10p"];
+test_dc![no_quit_macro_depth;"[qp][x]x10p"];
+test_dc![Quit;"[Qp]x10p"];
+test_dc![no_Quit_macro_depth;"[Qp][x]x10p"];
+
+test_dc![huge_q2;"371946139746397463926439726439764969639436932476233984734843946937638974648736487643827 Q 10p"];

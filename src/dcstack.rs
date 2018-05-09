@@ -110,6 +110,15 @@ fn to_string_radix(n: &BigDecimal, radix: u32) -> String {
     s
 }
 
+impl fmt::Display for MemoryCell {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            &MemoryCell::Num(ref n) => f.write_str(&to_string_radix(n, 10)),
+            &MemoryCell::Str(ref txt) => write!(f, "[{}]", &str::from_utf8(txt).expect("utf8 error")),
+        }
+    }
+}
+
 impl AddAssign for MemoryCell {
     fn add_assign(&mut self, rhs: MemoryCell) {
         if let MemoryCell::Num(ref rhs) = rhs {
@@ -445,10 +454,15 @@ impl DCStack {
 
 impl fmt::Display for DCStack {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        for item in self.stack.iter().rev() {
-            writeln!(f, "{}", item.to_str_radix(10))?;
+        let last_index = self.stack.len();
+        f.write_str("[")?;
+        for (index, item) in self.stack.iter().enumerate() {
+            item.fmt(f)?;
+            if index+1 < last_index {
+                f.write_str(", ")?;
+            }
         }
-        Ok(())
+        f.write_str("]")
     }
 }
 

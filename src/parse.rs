@@ -34,7 +34,7 @@ enum ParserErrorType {
 pub struct ParserError<'a> {
     pub position: usize,
     error_type: ParserErrorType,
-    pub instructions: Vec<Instruction<'a>>,
+    pub program: Program<'a>,
     pub unparsed: &'a [u8],
 }
 
@@ -127,9 +127,9 @@ macro_rules! push_and_toplevel {
 // dc: ']' (0135) unimplemented
 // 20
 // 10
-pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
+pub fn parse(program_text: &[u8]) -> Result<Program, ParserError> {
     let mut state = ParserState::TopLevel;
-    let mut instructions = Vec::new();
+    let mut program = Program::default();
     let mut position: usize = 0;
 
     loop {
@@ -138,59 +138,59 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 ParserState::Error(position, error_type) => Err(ParserError {
                     position,
                     error_type,
-                    instructions,
+                    program,
                     unparsed: &program_text[position + 1..],
                 }),
-                ParserState::TopLevel => Ok(instructions),
+                ParserState::TopLevel => Ok(program),
                 ParserState::Num {
                     start,
                     end,
                     dot_position,
                 } => {
                     let pos = dot_position.unwrap_or(end);
-                    instructions.push(Instruction::Num(
+                   program.push(Instruction::Num(
                         &program_text[start..pos],
                         &program_text[::std::cmp::min(pos + 1, end)..end],
                     ));
-                    Ok(instructions)
+                    Ok(program)
                 }
                 ParserState::Register(_) => Err(ParserError {
                     position,
                     error_type: ParserErrorType::EOP("was expecting a register".to_string()),
-                    instructions,
+                    program,
                     unparsed: &program_text[position + 1..],
                 }),
-                ParserState::Mark => Ok(instructions),
+                ParserState::Mark => Ok(program),
                 // dc actually seg faults in this case
                 ParserState::PrepareToReadUntil {
                     terminator: Terminator::String,
                 } => Err(ParserError {
                     position,
                     error_type: ParserErrorType::EOP("string not completed".to_string()),
-                    instructions,
+                    program,
                     unparsed: &program_text[position + 1..],
                 }),
-                ParserState::PrepareToReadUntil { .. } => Ok(instructions),
+                ParserState::PrepareToReadUntil { .. } => Ok(program),
                 ParserState::ReadUntilByte {
                     terminator: Terminator::String,
                     range,
                 } => {
-                    instructions.push(Instruction::Str(&program_text[range]));
-                    Ok(instructions)
+                    program.push(Instruction::Str(&program_text[range]));
+                    Ok(program)
                 }
                 ParserState::ReadUntilByte {
                     terminator: Terminator::System,
                     range,
                 } => {
-                    instructions.push(Instruction::System(&program_text[range]));
-                    Ok(instructions)
+                    program.push(Instruction::System(&program_text[range]));
+                    Ok(program)
                 }
                 ParserState::ReadUntilByte {
                     terminator: Terminator::Comment,
                     range,
                 } => {
-                    instructions.push(Instruction::Comment(&program_text[range]));
-                    Ok(instructions)
+                    program.push(Instruction::Comment(&program_text[range]));
+                    Ok(program)
                 }
             };
         }
@@ -199,12 +199,12 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 return Err(ParserError {
                     position,
                     error_type,
-                    instructions,
+                    program,
                     unparsed: &program_text[position + 1..],
                 })
             }
             (ParserState::TopLevel, 0) => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Nop]]
+                incrementing![position; push_and_toplevel![program; Instruction::Nop]]
             }
             (ParserState::TopLevel, b'.') => incrementing![position; ParserState::Num {
                     start: position,
@@ -222,52 +222,52 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                     dot_position: None,
             }],
             (ParserState::TopLevel, b'p') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::PrintLN]]
+                incrementing![position; push_and_toplevel![program; Instruction::PrintLN]]
             }
             (ParserState::TopLevel, b'n') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::PrintPop]]
+                incrementing![position; push_and_toplevel![program; Instruction::PrintPop]]
             }
             (ParserState::TopLevel, b'P') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::PrettyPrint]]
+                incrementing![position; push_and_toplevel![program; Instruction::PrettyPrint]]
             }
             (ParserState::TopLevel, b'f') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::PrintStack]]
+                incrementing![position; push_and_toplevel![program; Instruction::PrintStack]]
             }
             (ParserState::TopLevel, b'+') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Add]]
+                incrementing![position; push_and_toplevel![program; Instruction::Add]]
             }
             (ParserState::TopLevel, b'-') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Sub]]
+                incrementing![position; push_and_toplevel![program; Instruction::Sub]]
             }
             (ParserState::TopLevel, b'*') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Mul]]
+                incrementing![position; push_and_toplevel![program; Instruction::Mul]]
             }
             (ParserState::TopLevel, b'/') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Div]]
+                incrementing![position; push_and_toplevel![program; Instruction::Div]]
             }
             (ParserState::TopLevel, b'%') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Mod]]
+                incrementing![position; push_and_toplevel![program; Instruction::Mod]]
             }
             (ParserState::TopLevel, b'~') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Divmod]]
+                incrementing![position; push_and_toplevel![program; Instruction::Divmod]]
             }
             (ParserState::TopLevel, b'^') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Exp]]
+                incrementing![position; push_and_toplevel![program; Instruction::Exp]]
             }
             (ParserState::TopLevel, b'|') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Modexp]]
+                incrementing![position; push_and_toplevel![program; Instruction::Modexp]]
             }
             (ParserState::TopLevel, b'v') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Sqrt]]
+                incrementing![position; push_and_toplevel![program; Instruction::Sqrt]]
             }
             (ParserState::TopLevel, b'c') => {
-                incrementing![position; push_and_toplevel![instructions; Instruction::Clear]]
+                incrementing![position; push_and_toplevel![program; Instruction::Clear]]
             }
             (ParserState::TopLevel, b'd') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::Dup]]
+                incrementing![position;push_and_toplevel![program; Instruction::Dup]]
             }
             (ParserState::TopLevel, b'r') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::Swap]]
+                incrementing![position;push_and_toplevel![program; Instruction::Swap]]
             }
             (ParserState::TopLevel, b's') => {
                 incrementing![position;ParserState::Register(RegisterOperationType::Store)]
@@ -292,40 +292,40 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
             }
             (ParserState::TopLevel, b'!') => incrementing![position;ParserState::Mark],
             (ParserState::TopLevel, b'i') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::SetInputRadix]]
+                incrementing![position;push_and_toplevel![program; Instruction::SetInputRadix]]
             }
             (ParserState::TopLevel, b'o') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::SetOutputRadix]]
+                incrementing![position;push_and_toplevel![program; Instruction::SetOutputRadix]]
             }
             (ParserState::TopLevel, b'k') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::SetPrecision]]
+                incrementing![position;push_and_toplevel![program; Instruction::SetPrecision]]
             }
             (ParserState::TopLevel, b'I') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::GetInputRadix]]
+                incrementing![position;push_and_toplevel![program; Instruction::GetInputRadix]]
             }
             (ParserState::TopLevel, b'O') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::GetOutputRadix]]
+                incrementing![position;push_and_toplevel![program; Instruction::GetOutputRadix]]
             }
             (ParserState::TopLevel, b'K') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::GetPrecision]]
+                incrementing![position;push_and_toplevel![program; Instruction::GetPrecision]]
             }
             (ParserState::TopLevel, b'[') => {
                 incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::String}]
             }
             (ParserState::TopLevel, b'a') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::OpToString]]
+                incrementing![position;push_and_toplevel![program; Instruction::OpToString]]
             }
             (ParserState::TopLevel, b'x') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::ExecuteTos]]
+                incrementing![position;push_and_toplevel![program; Instruction::ExecuteTos]]
             }
             (ParserState::TopLevel, b'Z') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::Digits]]
+                incrementing![position;push_and_toplevel![program; Instruction::Digits]]
             }
             (ParserState::TopLevel, b'X') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::FractionDigits]]
+                incrementing![position;push_and_toplevel![program; Instruction::FractionDigits]]
             }
             (ParserState::TopLevel, b'z') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::StackDepth]]
+                incrementing![position;push_and_toplevel![program; Instruction::StackDepth]]
             }
             (ParserState::TopLevel, b'#') => {
                 incrementing![position; ParserState::PrepareToReadUntil{terminator: Terminator::Comment}]
@@ -337,13 +337,13 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 incrementing![position;ParserState::Register(RegisterOperationType::GetArray)]
             }
             (ParserState::TopLevel, b'?') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::ExecuteInput]]
+                incrementing![position;push_and_toplevel![program; Instruction::ExecuteInput]]
             }
             (ParserState::TopLevel, b'q') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::ReturnCaller]]
+                incrementing![position;push_and_toplevel![program; Instruction::ReturnCaller]]
             }
             (ParserState::TopLevel, b'Q') => {
-                incrementing![position;push_and_toplevel![instructions; Instruction::ReturnN]]
+                incrementing![position;push_and_toplevel![program; Instruction::ReturnN]]
             }
             (ParserState::TopLevel, b' ') => incrementing![position; ParserState::TopLevel], // do nothing
             (ParserState::TopLevel, b'\n') => incrementing![position; ParserState::TopLevel], // do nothing
@@ -390,11 +390,11 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 _,
             ) => {
                 let dot_pos = dot_position.unwrap_or(end);
-                push_and_toplevel![instructions; Instruction::Num(&program_text[start..dot_pos], &program_text[::std::cmp::min(dot_pos+1, end)..end])]
+                push_and_toplevel![program; Instruction::Num(&program_text[start..dot_pos], &program_text[::std::cmp::min(dot_pos+1, end)..end])]
             }
             (ParserState::Register(register_operation_type), ch) => incrementing![
                 position; 
-                push_and_toplevel![ instructions; Instruction::RegisterOperation(register_operation_type, ch)]],
+                push_and_toplevel![ program; Instruction::RegisterOperation(register_operation_type, ch)]],
             (ParserState::Mark, b'>') => {
                 incrementing![position; ParserState::Register(RegisterOperationType::TosGeExecute)]
             }
@@ -421,7 +421,7 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 NEWLINE_BYTE,
             ) => incrementing![
                 position;
-                push_and_toplevel![instructions; Instruction::System(&program_text[start .. end])]],
+                push_and_toplevel![program; Instruction::System(&program_text[start .. end])]],
             (
                 ParserState::ReadUntilByte {
                     terminator: Terminator::String,
@@ -430,7 +430,7 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 STRING_TERMINATOR,
             ) => incrementing![
                 position;
-                push_and_toplevel![instructions; Instruction::Str(&program_text[start .. end])]],
+                push_and_toplevel![program; Instruction::Str(&program_text[start .. end])]],
             (
                 ParserState::ReadUntilByte {
                     terminator: Terminator::Comment,
@@ -439,7 +439,7 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
                 NEWLINE_BYTE,
             ) => incrementing![
                 position;
-                push_and_toplevel![instructions; Instruction::Comment(&program_text[start .. end])]],
+                push_and_toplevel![program; Instruction::Comment(&program_text[start .. end])]],
             (
                 ParserState::ReadUntilByte {
                     terminator,
@@ -452,6 +452,8 @@ pub fn parse(program_text: &[u8]) -> Result<Vec<Instruction>, ParserError> {
         }
     }
 }
+
+
 
 // fn ascii_to_num<T>(bytes: &[u8]) -> Result<T, String>
 //     where T: FromStr + Default,
@@ -475,7 +477,7 @@ macro_rules! parse_tests {
         #[test]
         fn $name() {
             let (input, expected) = $value;
-            assert_eq!(expected, parse(input.as_bytes()));
+            assert_eq!(expected, parse(input.as_bytes()).map(|p| p.instructions));
         }
     )*
     }
@@ -556,11 +558,6 @@ parse_tests! {
     // add failure tests
 }
 
-#[test]
-fn testparse() {
-    let (input, expected) = ("", Ok(vec![]));
-    assert_eq!(expected, parse(input.as_bytes()));
-}
 
 #[test]
 fn testparse_invalid() {
@@ -569,7 +566,7 @@ fn testparse_invalid() {
         assert_eq!(ParserErrorType::InvalidCharacter(1), parse_error.error_type);
         assert_eq!(0, parse_error.position);
         assert!(parse_error.unparsed.is_empty());
-        assert!(parse_error.instructions.is_empty())
+        assert!(parse_error.program.instructions.is_empty())
     } else {
         assert!(false)
     }
