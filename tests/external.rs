@@ -105,5 +105,6 @@ test_dc![quit;"[qp]x10p"];
 test_dc![no_quit_macro_depth;"[qp][x]x10p"];
 test_dc![Quit;"[Qp]x10p"];
 test_dc![no_Quit_macro_depth;"[Qp][x]x10p"];
+test_dc![Quit_inconsistency;"1Q10p"];
 
 test_dc![huge_q2;"371946139746397463926439726439764969639436932476233984734843946937638974648736487643827 Q 10p"];
