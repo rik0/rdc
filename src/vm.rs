@@ -38,9 +38,6 @@ static TERMINATING_RETURN_ENCLOSING: &'static str = "terminating return enclosin
 static NON_TERMINATING_RETURN: &'static str = "non terminating return";
 static BAD_Q_NUMBER: &'static str = "Q command requires a number >= 1";
 
-#[cfg(not(target_os="macos"))]
-static BAD_Q_NUMBER: &'static str = "Q command requires a number >= 1";
-
 impl VMState {
     fn message(&self) -> &'static str {
         match self {
