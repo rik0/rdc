@@ -209,7 +209,7 @@ impl fmt::Display for ReturnState {
 }
 
 impl From<VMState> for ReturnState {
-    fn from(vm_state: VMState) -> ReturnState{
+    fn from(vm_state: VMState) -> ReturnState {
         match vm_state {
             VMState::NonTerminatingReturn(n) => ReturnState::NonTerminatingReturn(n),
             VMState::TerminatingReturn => ReturnState::TerminatingReturn,
@@ -332,9 +332,9 @@ where
                     self.trace("__exit_eval__", instruction)?;
                     match vm_state {
                         VMState::Continue => continue,
-                        r @ VMState::TerminatingReturn| r @ VMState::TerminatingReturnEnclosing| r@ VMState::NonTerminatingReturn(..) => {
-                            return Ok(ReturnState::from(r))
-                        }
+                        r @ VMState::TerminatingReturn
+                        | r @ VMState::TerminatingReturnEnclosing
+                        | r @ VMState::NonTerminatingReturn(..) => return Ok(ReturnState::from(r)),
                         error => {
                             // we do not really need to go out here
                             writeln!(self.error_sink, "dc: {}", error)?;
@@ -368,10 +368,17 @@ where
     }
 
     fn execute_macro(&mut self, program_text: &[u8]) -> Result<ReturnState, io::Error> {
-        self.macro_level += 1; // todo make it into a RAI counter
-        let result_status = self.execute(program_text)?;
-        self.macro_level -= 1; // bug without the counter
-        Ok(result_status.next())
+        self.macro_level += 1; 
+        match self.execute(program_text) {
+            Ok(result_status) => {
+                self.macro_level -= 1; 
+                Ok(result_status.next())
+            }
+            Err(error) => {
+                self.macro_level -= 1; 
+                Err(error)
+            },
+        }
     }
 
     #[inline]
@@ -469,27 +476,21 @@ where
             // string
             &Instruction::OpToString => VMState::NotImplemented,
             &Instruction::ExecuteTos => match self.stack.pop_str() {
-                Ok(bytes) => {
-                    self.execute_macro(&bytes)?.into()
-                }
+                Ok(bytes) => self.execute_macro(&bytes)?.into(),
                 Err(stack_error) => VMState::StackError(stack_error),
             },
             &Instruction::ExecuteInput => VMState::NotImplemented,
-            &Instruction::ReturnCaller => {
-                VMState::TerminatingReturn
-            }
-            &Instruction::ReturnN => {
-                match self.stack.pop_num(){
-                    Ok(levels) => {
-                        if let Some(levels) = levels.to_u64() {
-                            VMState::NonTerminatingReturn(levels)
-                        } else {
-                            VMState::InvalidCallStackOperation
-                        }
+            &Instruction::ReturnCaller => VMState::TerminatingReturn,
+            &Instruction::ReturnN => match self.stack.pop_num() {
+                Ok(levels) => {
+                    if let Some(levels) = levels.to_u64() {
+                        VMState::NonTerminatingReturn(levels)
+                    } else {
+                        VMState::InvalidCallStackOperation
                     }
-                    Err(stack_error) => VMState::StackError(stack_error)
                 }
-            }
+                Err(stack_error) => VMState::StackError(stack_error),
+            },
             // status enquiry
             &Instruction::Digits => VMState::NotImplemented,
             &Instruction::FractionDigits => VMState::NotImplemented,
