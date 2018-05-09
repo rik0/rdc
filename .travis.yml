@@ -1,3 +1,7 @@
+addons:
+  apt:
+    packages:
+    - dc
 language: rust
 rust:
     - stable
