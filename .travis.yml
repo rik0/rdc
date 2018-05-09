@@ -5,7 +5,7 @@ rust:
   - stable
   - beta
   - nightly
-  
+
 matrix:
   allow_failures:
     - rust: nightly
@@ -20,6 +20,7 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
+      - dc 
 
 after_success: |
   wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
