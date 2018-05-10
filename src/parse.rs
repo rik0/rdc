@@ -408,7 +408,7 @@ pub fn parse(program_text: &[u8]) -> Result<Program, ParserError> {
                 incrementing![position; ParserState::ReadUntilByte { terminator: Terminator::System, range: position .. position+1 }]
             }
             (ParserState::PrepareToReadUntil { ref terminator }, ch) if *terminator == ch => {
-                incrementing![position; ParserState::TopLevel]
+                incrementing![position; push_and_toplevel![program; Instruction::Str(&program_text[position..position])]]
             }
             (ParserState::PrepareToReadUntil { terminator }, _) => {
                 incrementing![position; ParserState::ReadUntilByte{terminator, range: position..position+1}]
@@ -540,6 +540,7 @@ parse_tests! {
     parse_test_ltagt: ("<>", Ok(vec![Instruction::RegisterOperation(RegisterOperationType::TosLtExecute, b'>' as Register)])),
     parse_test_str_aa3: ("[aa]3", Ok(vec![Instruction::Str("aa".as_bytes()), Instruction::Num("3".as_bytes(), "".as_bytes())])),
     parse_test_str_aa: ("[aa]", Ok(vec![Instruction::Str("aa".as_bytes())])),
+    parse_test_str_empty: ("[]", Ok(vec![Instruction::Str(&[])])),
     parse_test_str_aanl: ("[aa\n]", Ok(vec![Instruction::Str("aa\n".as_bytes())])),
     parse_test_str_quoteaanl: ("[!aa\n]", Ok(vec![Instruction::Str("!aa\n".as_bytes())])),
     parse_test_str_aa_not_term: ("[aa", Ok(vec![Instruction::Str("aa".as_bytes())])),
