@@ -277,6 +277,7 @@ fn test_partial_order() {
     assert_eq!(Some(Ordering::Less), ZERO.partial_cmp(&ONE));
     assert_eq!(Some(Ordering::Greater), ONE.partial_cmp(&ZERO));
     assert_eq!(Some(Ordering::Equal), ZERO.partial_cmp(&ZERO));
+    assert_eq!(Some(Ordering::Less), UnsignedDCNumber::from(213).partial_cmp(&UnsignedDCNumber::from_str("321.12").unwrap()));
 }
 
 #[test]
