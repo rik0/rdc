@@ -164,8 +164,15 @@ impl<'a> UnsignedDCNumber<'a> {
                 // if we are here, it means they are all zeros: we did not find any non zero character
                 return Ok(ZERO.clone());
             } 
+            Some((0,  b'.')) => {
+                // TODO: if we do not do this, we will not have a leading 0, which might be desirable
+                digits.push(0);
+                first_dot = Some(1);
+            }
             Some((non_zero_index,  b'.')) => {
-                first_dot = Some(non_zero_index + 1);
+                first_dot = Some(non_zero_index);
+                // TODO: if we do not do this, we will not have a leading 0, which might be desirable
+                digits.push(0);
             }
             Some((_non_zero_index, ch @ b'1'...b'9')) => {
                 digits.push(ch - b'0');
@@ -440,7 +447,10 @@ fn test_from_str() {
     assert_eq!(ZERO, UnsignedDCNumber::from_str("0").expect("0"));
     assert_eq!(ONE, UnsignedDCNumber::from_str("1").expect("1"));
 
-
+    assert_eq!(
+        Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::EmptyString}),
+        UnsignedDCNumber::from_str("")
+    );
 
     assert_eq!(
        UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
@@ -452,10 +462,34 @@ fn test_from_str() {
         UnsignedDCNumber::from_str("1234").expect("1234")
     );
 
-    // TODO: determine if we really need this test case: is it meant to succeeed?
+    assert_eq!(
+        UnsignedDCNumber::from(1234),
+        UnsignedDCNumber::from_str("01234").expect("01234")
+    );
+
     assert_eq!(
        UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
        UnsignedDCNumber::from_str("1234.320").expect("1234.32") 
+    );
+
+    assert_eq!(
+       UnsignedDCNumber::from_str("1234").expect("01234"),
+       UnsignedDCNumber::from_str("1234.0").expect("1234.0") 
+    );
+
+    assert_eq!(
+       UnsignedDCNumber::from_str("1234").expect("01234"),
+       UnsignedDCNumber::from_str("1234.").expect("1234.") 
+    );
+
+    assert_eq!(
+       UnsignedDCNumber::from_str(".32").expect(".32"),
+       UnsignedDCNumber::from_str("0.32").expect(".32") 
+    );
+
+    assert_eq!(
+       UnsignedDCNumber::from_str(".320").expect(".320"),
+       UnsignedDCNumber::from_str("0.32").expect(".32") 
     );
 
     assert_eq!(
@@ -467,7 +501,12 @@ fn test_from_str() {
        UnsignedDCNumber::from_str("01234.32").expect("01234.32"),
        UnsignedDCNumber::from_str("1234.320").expect("1234.320") 
     );
+
+
+
 }
+
+
 
 // impl <'a> ToPrimitive for DCNumber<'a> {
 //     to_u64(&self) -> Option<u64> {
