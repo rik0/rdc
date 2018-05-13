@@ -374,7 +374,7 @@ fn test_from_str() {
 
     assert_eq!(
        UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
-       UnsignedDCNumber{digits: Cow::Borrowed(&[2, 3, 4, 3, 2, 1]), separator: 3}
+       UnsignedDCNumber{digits: Cow::Borrowed(&[1, 2, 3, 4, 3, 2]), separator: 4}
     );
 
     assert_eq!(
