@@ -357,7 +357,8 @@ const LOG_10_2: f32 = f32::consts::LN_2 / f32::consts::LN_10;
 #[inline]
 fn decimal_digits(n: u64) -> u32 {
     match n {
-        0...9 => 1,
+        0 => 0,
+        1...9 => 1,
         10...100 => 2,
         100...1000 => 3,
         1000...10000 => 4,
@@ -376,7 +377,7 @@ fn decimal_digits(n: u64) -> u32 {
 
 #[test]
 fn test_decimal_digits() {
-    assert_eq!(1, decimal_digits(0));
+    assert_eq!(0, decimal_digits(0));
     assert_eq!(1, decimal_digits(1));
     assert_eq!(2, decimal_digits(22));
     assert_eq!(3, decimal_digits(311));
