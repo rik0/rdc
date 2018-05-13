@@ -329,6 +329,10 @@ fn test_to_primitive() {
         ::std::i64::MAX as u64,
         MAX_I64.to_u64().expect("u64 max_i64")
     );
+
+    assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_u64());
+    assert_eq!(None, UnsignedDCNumber::from_str("6125216521678251786215186528167125821752187528175218721582715125214512421532154211624217421765421").expect("huge").to_u64());
+
     assert_eq!(
         ::std::i64::MAX as u64 + 1,
         MAX_I64.to_u64().expect("u64 max_i64") + 1
@@ -338,6 +342,7 @@ fn test_to_primitive() {
     assert_eq!(1, ONE.to_i64().expect("i64 one"));
     assert_eq!(None, MAX_U64.to_i64());
     assert_eq!(::std::i64::MAX, MAX_I64.to_i64().expect("i64 max_i64"));
+    assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_i64());
 }
 
 // impl <'a> num::Zero for UnsignedDCNumber<'a> {
@@ -451,6 +456,26 @@ fn test_from_str() {
     assert_eq!(
         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::EmptyString}),
         UnsignedDCNumber::from_str("")
+    );
+
+    assert_eq!(
+         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         UnsignedDCNumber::from_str("a")
+    );
+
+    assert_eq!(
+         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         UnsignedDCNumber::from_str("1a")
+    );
+
+    assert_eq!(
+         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         UnsignedDCNumber::from_str("0a")
+    );
+
+    assert_eq!(
+         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         UnsignedDCNumber::from_str(".a")
     );
 
     assert_eq!(
