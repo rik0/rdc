@@ -7,6 +7,7 @@ mod parse;
 #[macro_use]
 mod dcstack;
 pub mod vm;
+mod dcnumber;
 
 use std::io::Write;
 use std::path::Path;
