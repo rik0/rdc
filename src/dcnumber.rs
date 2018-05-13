@@ -62,7 +62,7 @@ macro_rules! static_unsigned_dcnumber {
         const $digits_name: $digits_type = $digits;
         static $dcnumber_name: UnsignedDCNumber = UnsignedDCNumber {
             digits: Cow::Borrowed(&$digits_name),
-            separator: 0,
+            separator: ::std::mem::size_of::<$digits_type>(),
         };
     };
 }
@@ -73,16 +73,33 @@ static_unsigned_dcnumber![MAX_U64; MAX_U64_DIGITS: [u8; 20] = [1,8,4,4,6, 7,4,4,
 static_unsigned_dcnumber![MAX_I64; MAX_I64_DIGITS: [u8; 19] = [9,2,2,3,3,7,2,0,3,6,8,5,4,7,7,5,8,0,7]];
 
 impl<'a> UnsignedDCNumber<'a> {
+
+    
+    pub fn new<T>(digits: T, last_integer: usize)  -> Self
+    where Cow<'a, [u8]>: From<T>
+    {   
+        UnsignedDCNumber{digits: digits.into(), separator: last_integer}
+    }
+
+    pub fn with_integer_digits<T>(digits: T)  -> Self 
+    where Cow<'a, [u8]>: From<T>
+    {
+        let digits: Cow<'a, [u8]> = digits.into();
+        let size = digits.len();
+        UnsignedDCNumber{digits, separator: size}
+        
+    }
+
     #[allow(dead_code)]
     #[inline]
     pub fn integer_magnitude(&self) -> usize {
-        self.digits.len() - self.separator
+        self.separator
     }
 
     #[allow(dead_code)]
     #[inline]
     pub fn fractional_digits(&self) -> usize {
-        self.separator
+        self.digits.len() - self.separator
     }
 
     #[inline]
@@ -136,7 +153,7 @@ impl<'a> UnsignedDCNumber<'a> {
             return Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::EmptyString});
         }
 
-        let mut bytes = s.bytes();
+        let bytes = s.bytes();
 
         for (i, ch) in bytes.enumerate() {
             match ch {
@@ -152,11 +169,8 @@ impl<'a> UnsignedDCNumber<'a> {
             }
         }
 
-        let separator = first_dot.unwrap_or(0);
-        Ok(UnsignedDCNumber {
-            digits: Cow::Owned(digits),
-            separator: separator,
-        })
+        let separator = first_dot.unwrap_or(digits.len());
+        Ok(UnsignedDCNumber::new(digits, separator))
     }
 }
 
@@ -164,6 +178,7 @@ impl<'a> UnsignedDCNumber<'a> {
 fn test_split() {
     assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
     assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
+    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.32").expect("1234.32").split())
 }
 
 impl<'a> Default for UnsignedDCNumber<'a> {
@@ -329,10 +344,7 @@ impl<'a> From<u64> for UnsignedDCNumber<'a> {
             digits.set_len(n_digits);
         }
 
-        UnsignedDCNumber::<'a> {
-            digits: Cow::Owned(digits),
-            separator: 0,
-        }
+        UnsignedDCNumber::with_integer_digits(digits)
     }
 }
 
@@ -352,10 +364,7 @@ fn test_from_u64_one() {
 fn test_from_u64() {
     let n = UnsignedDCNumber::from(1234567890);
     assert_eq!(
-        UnsignedDCNumber {
-            digits: [1, 2, 3, 4, 5,6 , 7, 8, 9, 0].as_ref().into(),
-            separator: 0
-        },
+        UnsignedDCNumber::with_integer_digits([1, 2, 3, 4, 5,6 , 7, 8, 9, 0].as_ref()),
         n
     );
 }
@@ -377,7 +386,7 @@ fn test_from_str() {
 
     assert_eq!(
        UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
-       UnsignedDCNumber{digits: Cow::Borrowed(&[1, 2, 3, 4, 3, 2]), separator: 4}
+       UnsignedDCNumber::new([1, 2, 3, 4, 3, 2].as_ref(), 4)
     );
 
     assert_eq!(
