@@ -43,7 +43,9 @@ impl Display for ParseDCNumberError {
 }
 
 impl error::Error for ParseDCNumberError {
-
+    fn description(&self) -> &str {
+        self.message()
+    }
 }
 
 
@@ -178,7 +180,8 @@ impl<'a> UnsignedDCNumber<'a> {
 fn test_split() {
     assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
     assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
-    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.32").expect("1234.32").split())
+    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.32").expect("1234.32").split());
+    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2, 0].as_ref()), UnsignedDCNumber::from_str("1234.320").expect("1234.320").split());
 }
 
 impl<'a> Default for UnsignedDCNumber<'a> {
