@@ -285,6 +285,8 @@ fn test_order() {
     assert!(ZERO < ONE);
 }
 
+// TODO add similar to test_partial_order for cmp as well
+
 impl<'a> ToPrimitive for UnsignedDCNumber<'a> {
     fn to_u64(&self) -> Option<u64> {
         if self.fractional().iter().cloned().any(|d| d != 0) {
@@ -319,6 +321,10 @@ fn test_to_primitive() {
     assert_eq!(
         ::std::i64::MAX as u64,
         MAX_I64.to_u64().expect("u64 max_i64")
+    );
+    assert_eq!(
+        ::std::i64::MAX as u64 + 1,
+        MAX_I64.to_u64().expect("u64 max_i64") + 1
     );
 
     assert_eq!(0, ZERO.to_i64().expect("i64 zero"));
