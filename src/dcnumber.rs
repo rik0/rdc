@@ -13,42 +13,12 @@ use std::f32;
 //     Minus
 // }
 
-#[derive(Clone, Debug, PartialEq)]
-enum ParseDCNumberErrorKind {
-    EmptyString,
-    RepeatedDot,
-    InvalidDigit,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ParseDCNumberError {
-    kind: ParseDCNumberErrorKind
-}
-
-impl ParseDCNumberError {
-    fn message(&self) -> &'static str {
-        match self.kind {
-            ParseDCNumberErrorKind::EmptyString => &"empty string",
-            ParseDCNumberErrorKind::RepeatedDot => &"repeated dot",
-            ParseDCNumberErrorKind::InvalidDigit => &"invalid digit",
-        }
-    }
-}
-
-impl Display for ParseDCNumberError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str(self.message())?;
-        Ok(())
-    }
-}
-
-impl error::Error for ParseDCNumberError {
-    fn description(&self) -> &str {
-        self.message()
-    }
-}
-
-
+define_error_type![
+    ParseDCNumberError;
+    EmptyString: "empty string",
+    RepeatedDot: "repeated dot",
+    InvalidDigit: "invalid digit"
+];
 
 
 #[derive(Clone, Debug)]
@@ -153,7 +123,7 @@ impl<'a> UnsignedDCNumber<'a> {
         let mut digits = Vec::with_capacity(no_digits);
 
         if s.is_empty() {
-            return Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::EmptyString});
+            return Err(ParseDCNumberError::EmptyString);
         }
         let mut bytes = s.bytes();
 
@@ -178,7 +148,7 @@ impl<'a> UnsignedDCNumber<'a> {
                 digits.push(ch - b'0');
             }
             Some((_non_zero_index, _non_zero_byte)) => {
-                return Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit});
+                return Err(ParseDCNumberError::InvalidDigit);
             }
         }
 
@@ -195,10 +165,10 @@ impl<'a> UnsignedDCNumber<'a> {
                     if let None = first_dot {
                         first_dot = Some(i+1);
                     } else {
-                        return Err(ParseDCNumberError {kind: ParseDCNumberErrorKind::RepeatedDot});
+                        return Err(ParseDCNumberError::RepeatedDot);
                     }
                 }
-                _ => return Err(ParseDCNumberError {kind: ParseDCNumberErrorKind::InvalidDigit}),
+                _ => return Err(ParseDCNumberError::InvalidDigit),
             }
         }
 
@@ -454,32 +424,32 @@ fn test_from_str() {
     assert_eq!(ONE, UnsignedDCNumber::from_str("1").expect("1"));
 
     assert_eq!(
-        Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::EmptyString}),
+        Err(ParseDCNumberError::EmptyString),
         UnsignedDCNumber::from_str("")
     );
 
     assert_eq!(
-         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         Err(ParseDCNumberError::InvalidDigit),
          UnsignedDCNumber::from_str("a")
     );
 
     assert_eq!(
-         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         Err(ParseDCNumberError::InvalidDigit),
          UnsignedDCNumber::from_str("1a")
     );
 
     assert_eq!(
-         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         Err(ParseDCNumberError::InvalidDigit),
          UnsignedDCNumber::from_str("0a")
     );
 
     assert_eq!(
-         Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit}),
+         Err(ParseDCNumberError::InvalidDigit),
          UnsignedDCNumber::from_str(".a")
     );
 
         assert_eq!(
-        Err(ParseDCNumberError {kind: ParseDCNumberErrorKind::RepeatedDot}),
+        Err(ParseDCNumberError::RepeatedDot),
          UnsignedDCNumber::from_str("0..0")
     );
 
