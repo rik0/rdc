@@ -233,6 +233,11 @@ impl<'a> Default for UnsignedDCNumber<'a> {
     }
 }
 
+#[test]
+fn test_default() {
+    assert_eq!(ZERO, UnsignedDCNumber::default());
+}
+
 impl<'a> PartialEq for UnsignedDCNumber<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp_unsigned(other) == Ordering::Equal
