@@ -6,6 +6,10 @@ rust:
   - beta
   - nightly
 
+
+env:
+  secure: "lw3UaxgByjtPNe8Ov8643kwOYw9nAU/N6L6eNy1O7WeXTl773tZfQhm2IbgK6JGIjou1w0uILyXir3ilF5dmoUeY4VLiAfwWEdLAOZw9QXxwazUuzXuk+svrLTRqFrI2fSf193nNPYMXxToTMXPlQPFMPWFF8CkPw38OW8DUEZFIXYGWX4MuMr9r4cNhRgLimi9PRdqbmx8qr/HNz5UxoXEgUQXHTNRhKNUqd7MPww+DWWEToReCoHpU+z7DTBJRpYf+zlSCjPsy+j6dlW9sr9PqFKOIWiKrio2gW3SsmFvzqQJaCFFni8iqSBdnfl/H5m3ZDyfU54+jdqJQie0BmaxpN5xL5dA00TWirEP6TL6M2up66cy2UZ3ZPgyxMQ+kICVF6zcXq5lCbGqkbQjiY7PE+TbXqBhlGSifyFkn5XdYXe5vv2o0+ecSiLTvfsJ21ojvH6btq7E+FcxeqEIVhCBg3N6bu7aQpvwSO36265CZ4nJwB5dL6/2XifDwAXiWPsz54kNLigUQ6FUFXWtDBFLJZni5vMuIKFxiVsdn4RPTBl019CAEhc2uW0ucmmEbolTP6peBdBXyiJ0X9jn2UrGf69ypeIOFY8I6II9RWeHjEmb1uZFpWN5CVIaj5jMPy6MlYi77sKd5Iplj0BZwOQRdeh6hxn6camPMS88WS/U="
+
 matrix:
   allow_failures:
     - rust: nightly
@@ -28,3 +32,7 @@ after_success: |
     cargo tarpaulin --out Xml
     bash <(curl -s https://codecov.io/bash)
   fi
+  curl -o /tmp/travis-automerge https://raw.githubusercontent.com/cdown/travis-automerge/master/travis-automerge
+  chmod a+x /tmp/travis-automerge
+  BRANCHES_TO_MERGE_REGEX='^f/' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=rik0/rdc /tmp/travis-automerge
+
