@@ -1,38 +1,33 @@
 sudo: required
-
 language: rust
 rust:
-  - stable
-  - beta
-  - nightly
-
-
-env:
-  secure: "lw3UaxgByjtPNe8Ov8643kwOYw9nAU/N6L6eNy1O7WeXTl773tZfQhm2IbgK6JGIjou1w0uILyXir3ilF5dmoUeY4VLiAfwWEdLAOZw9QXxwazUuzXuk+svrLTRqFrI2fSf193nNPYMXxToTMXPlQPFMPWFF8CkPw38OW8DUEZFIXYGWX4MuMr9r4cNhRgLimi9PRdqbmx8qr/HNz5UxoXEgUQXHTNRhKNUqd7MPww+DWWEToReCoHpU+z7DTBJRpYf+zlSCjPsy+j6dlW9sr9PqFKOIWiKrio2gW3SsmFvzqQJaCFFni8iqSBdnfl/H5m3ZDyfU54+jdqJQie0BmaxpN5xL5dA00TWirEP6TL6M2up66cy2UZ3ZPgyxMQ+kICVF6zcXq5lCbGqkbQjiY7PE+TbXqBhlGSifyFkn5XdYXe5vv2o0+ecSiLTvfsJ21ojvH6btq7E+FcxeqEIVhCBg3N6bu7aQpvwSO36265CZ4nJwB5dL6/2XifDwAXiWPsz54kNLigUQ6FUFXWtDBFLJZni5vMuIKFxiVsdn4RPTBl019CAEhc2uW0ucmmEbolTP6peBdBXyiJ0X9jn2UrGf69ypeIOFY8I6II9RWeHjEmb1uZFpWN5CVIaj5jMPy6MlYi77sKd5Iplj0BZwOQRdeh6hxn6camPMS88WS/U="
-
+- stable
+- beta
+- nightly
 matrix:
   allow_failures:
-    - rust: nightly
-
+  - rust: nightly
 addons:
   apt:
     packages:
-      - libssl-dev
-      - dc 
+    - libssl-dev
+    - dc
 cache: cargo
-
 script:
-  - cargo clean
-  - cargo build
-  - cargo test
-
+- cargo clean
+- cargo build
+- cargo test
 after_success: |
   if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
     bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
     cargo tarpaulin --out Xml
     bash <(curl -s https://codecov.io/bash)
-  fi
-  curl -o /tmp/travis-automerge https://raw.githubusercontent.com/cdown/travis-automerge/master/travis-automerge
-  chmod a+x /tmp/travis-automerge
-  BRANCHES_TO_MERGE_REGEX='^f/' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=rik0/rdc /tmp/travis-automerge
 
+    curl -o /tmp/travis-automerge https://raw.githubusercontent.com/cdown/travis-automerge/master/travis-automerge
+    chmod a+x /tmp/travis-automerge
+    BRANCHES_TO_MERGE_REGEX='^f/' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=rik0/rdc /tmp/travis-automerge
+  fi
+
+env:
+  global:
+    secure: BQ9OpOWFJBt5uv1q9kzn57exofvS0xeRbUdkIGQGL1gnRFAfuRx88sC/CIqrB93qlVNy24TlFykqpQY8Q2e8KoiGep4xK1Yvd4sxWC1RO6TK8IWJDEu+yyxcnYQMxmQxNwoeRX7PJrOBJ+cJNaKLGt4xY8B5Khd+sQfA/oIBFUxi0EdGe8DWszeCiCx95BYy1TNT0LqM8YcafHf2SjyfhhfJNaGwd5eRCT/V2CMUOj5mNQ898kCPXELcQmqPYzdLT1Ab2m0T6jaY4RCUXr1/rFhUZEgzWBgD+4kqZBH8Jr0ppAB7qazMXRf+XxjT25CGDRNWAt3HVDT9dHoxdGLdnjCwmk+TAF/zvIooF7ZJVjKo0PRH1ITDm0z6SKvhUKveY15SMN6qXrW1SoHzPwUfgQj9QFcrCq1NptQkOigVxdn4LVJcNs4yjYzxALgF5hD0C19BfDtZxTi92wY7fyElrg+IbiT2APOJQtQqKZZLksfxU95LQMuWOexQV+HhtNam8rJpubAAsZtLRTB2qglcyj2IjwC7XxZSX6x5oQvga2p4KaVstIkEOGtwMghfVwWK+WHevNT9QtDt0IZdvzA9fp7f5afojCM8RlYapMt9Ej1ZHgellhPJBLm0SF/tYDs3kWBXk6i3PZymA2JtQehWeBA99eN+OQ+aMByavgq7qXY=
