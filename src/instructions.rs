@@ -114,7 +114,7 @@ impl<'a> fmt::Display for Instruction<'a> {
                     RegisterOperationType::SetArray => f.write_str(":")?,
                     RegisterOperationType::GetArray => f.write_str(";")?,
                 }
-                f.write_fmt(format_args!["{}", reg])
+                f.write_fmt(format_args!["{}", reg as char])
             }
             &Instruction::SetInputRadix => f.write_str("i"),
             &Instruction::SetOutputRadix => f.write_str("o"),
@@ -134,7 +134,7 @@ impl<'a> fmt::Display for Instruction<'a> {
                 write!(f, "!{}\n", allocate_str(command))
             }
             &Instruction::Comment(ref comment) => {
-                write!(f, "# {}\n", allocate_str(comment))
+                write!(f, "#{}\n", allocate_str(comment))
             }
         }
     }

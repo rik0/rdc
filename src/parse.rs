@@ -572,3 +572,42 @@ fn testparse_invalid() {
         assert!(false)
     }
 }
+
+
+macro_rules! parse_reversibility {
+    ($($name:ident: $value:expr,)*) => {
+    $(
+        #[test]
+        #[allow(non_snake_case)]
+        fn $name() {
+            let input = $value;
+
+            if let Ok(Program{instructions}) = parse(input.as_bytes()) {
+                let regenerated: String =instructions.iter().map(|i| format!("{}", i)).collect::<String>();
+                assert_eq!(input, regenerated);
+            } else {
+                assert!(false);
+            }
+        }
+    )*
+    }
+}
+
+parse_reversibility! {
+    rev_empty: "",
+    zero: "\0",
+    n: "123",
+    pln: "p",
+    pln2: "P",
+    pln3: "n",
+    ops: "+-*/%^|v",
+    stack: "cdr",
+    sa: "sa",
+    la: "la",
+    Sa: "Sa",
+    La: "La",
+    radix_and_prexision: "iokIOK",
+    more: "ax?qQZXz",
+    comment: "#foo\n",
+    command: "!bar\n",
+}
