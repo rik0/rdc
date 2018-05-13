@@ -2,12 +2,14 @@ extern crate bigdecimal;
 extern crate num;
 extern crate num_bigint;
 
+#[macro_use] mod error_type;
+
 mod instructions;
 mod parse;
-#[macro_use]
-mod dcstack;
+#[macro_use] mod dcstack;
 pub mod vm;
 mod dcnumber;
+
 
 use std::io::Write;
 use std::path::Path;
