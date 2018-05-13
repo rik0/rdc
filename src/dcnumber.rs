@@ -478,6 +478,11 @@ fn test_from_str() {
          UnsignedDCNumber::from_str(".a")
     );
 
+        assert_eq!(
+        Err(ParseDCNumberError {kind: ParseDCNumberErrorKind::RepeatedDot}),
+         UnsignedDCNumber::from_str("0..0")
+    );
+
     assert_eq!(
        UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
        UnsignedDCNumber::new([1, 2, 3, 4, 3, 2].as_ref(), 4)
