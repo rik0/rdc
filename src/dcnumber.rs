@@ -149,20 +149,44 @@ impl<'a> UnsignedDCNumber<'a> {
         assert_eq!(10, radix);
         let mut first_dot: Option<usize> = None;
         // use vecdeq preferentially
-        let mut digits = Vec::with_capacity(s.len());
+        let no_digits = s.len();
+        let mut digits = Vec::with_capacity(no_digits);
 
         if s.is_empty() {
             return Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::EmptyString});
         }
+        let mut bytes = s.bytes();
 
-        let bytes = s.bytes();
+
+
+        match bytes.by_ref().enumerate().find(|(i, d)| { if *d != b'0' { true } else { false }}) {
+            None => {
+                // if we are here, it means they are all zeros: we did not find any non zero character
+                return Ok(ZERO.clone());
+            } 
+            Some((non_zero_index,  b'.')) => {
+                first_dot = Some(non_zero_index + 1);
+            }
+            Some((_non_zero_index, ch @ b'1'...b'9')) => {
+                digits.push(ch - b'0');
+            }
+            Some((_non_zero_index, _non_zero_byte)) => {
+                return Err(ParseDCNumberError{kind: ParseDCNumberErrorKind::InvalidDigit});
+            }
+        }
+
+        // if we are here, we have one non zero character:
+        // * if it was dot, we have marked first_dot and added the zero digit
+        // * if it is a valid digit, we have added it among the digits
+        // * if they were all 0s or the first non zero was not a digit, it is a parse error and we
+        //   would not be here
 
         for (i, ch) in bytes.enumerate() {
             match ch {
                 d @ b'0'...b'9' => digits.push(d - b'0'),
                 b'.' => {
                     if let None = first_dot {
-                        first_dot = Some(i);
+                        first_dot = Some(i+1);
                     } else {
                         return Err(ParseDCNumberError {kind: ParseDCNumberErrorKind::RepeatedDot});
                     }
@@ -170,6 +194,25 @@ impl<'a> UnsignedDCNumber<'a> {
                 _ => return Err(ParseDCNumberError {kind: ParseDCNumberErrorKind::InvalidDigit}),
             }
         }
+
+        
+        if let Some(..) = first_dot {
+            loop {
+                match digits.pop()  {
+                    Some(0) => {
+                        continue;
+                    }
+                    Some(ch) => {
+                        digits.push(ch);
+                        break;
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+        }
+
 
         let separator = first_dot.unwrap_or(digits.len());
         Ok(UnsignedDCNumber::new(digits, separator))
@@ -181,7 +224,7 @@ fn test_split() {
     assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
     assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
     assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.32").expect("1234.32").split());
-    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2, 0].as_ref()), UnsignedDCNumber::from_str("1234.320").expect("1234.320").split());
+    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.320").expect("1234.320").split());
 }
 
 impl<'a> Default for UnsignedDCNumber<'a> {
@@ -398,10 +441,20 @@ fn test_from_str() {
     );
 
     // TODO: determine if we really need this test case: is it meant to succeeed?
-    // assert_eq!(
-    //    UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
-    //    UnsignedDCNumber::from_str("1234.320").expect("1234.32") 
-    // );
+    assert_eq!(
+       UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
+       UnsignedDCNumber::from_str("1234.320").expect("1234.32") 
+    );
+
+    assert_eq!(
+       UnsignedDCNumber::from_str("01234.32").expect("01234.32"),
+       UnsignedDCNumber::from_str("1234.32").expect("1234.32") 
+    );
+
+    assert_eq!(
+       UnsignedDCNumber::from_str("01234.32").expect("01234.32"),
+       UnsignedDCNumber::from_str("1234.320").expect("1234.320") 
+    );
 }
 
 // impl <'a> ToPrimitive for DCNumber<'a> {
