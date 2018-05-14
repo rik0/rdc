@@ -4,6 +4,10 @@ use std::fmt::{self, Display};
 use std::cmp::{self, Ordering};
 use std::error;
 use std::str::FromStr;
+use std::ops::{Add};
+use std::iter;
+use std::iter::Iterator;
+use std::iter::FromIterator;
 
 use std::f32;
 
@@ -313,6 +317,65 @@ fn test_to_primitive() {
     assert_eq!(None, MAX_U64.to_i64());
     assert_eq!(::std::i64::MAX, MAX_I64.to_i64().expect("i64 max_i64"));
     assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_i64());
+}
+
+fn align_integers<'a, 'b>(lhs: UnsignedDCNumber<'a>, rhs: UnsignedDCNumber<'b>) {
+
+}
+
+
+impl <'a> Add for UnsignedDCNumber<'a> {
+    type Output = UnsignedDCNumber<'a>;
+
+    fn  add<'b>(self, other: UnsignedDCNumber<'b>) -> Self {
+    
+        let self_fractional_len = self.fractional_digits();
+        let other_fractional_len = other.fractional_digits();
+        let fractional_tail: Vec<u8>;
+        
+        let mut self_digits = self.digits.into_owned();
+        let mut other_digits = other.digits.into_owned();
+
+        if self_fractional_len > other_fractional_len {
+            let offset = self_digits.len() - (self_fractional_len - other_fractional_len);
+            fractional_tail = self_digits.split_off(offset);
+        } else {
+            let offset = other_digits.len() - (other_fractional_len - self_fractional_len);
+            fractional_tail = other_digits.split_off(offset);
+        }
+
+        let separator: usize = 0;
+
+        let mut carry = false;
+
+        let mut out = self_digits.into_iter().zip(other_digits).map(|(lhs, rhs)| {
+            lhs
+            // lhs = if carry {
+            //     let (x, c) = lhs.overflowing_add(1);
+            //     carry = c;
+            //     x
+            // } else { lhs }
+            // // if the +1 caused carry, carry keeps on, but lhs is 0 so no further carry
+            // let (x, c) = lhs.overflowing_add(rhs);
+            // carry |= c;
+            // x
+        });
+        let mut digits: Vec<u8> = if carry {
+            out.chain(iter::once(1u8)).collect()
+        } else {
+            out.collect()
+        };
+        digits.extend(fractional_tail);
+        UnsignedDCNumber::new(digits, separator)
+    } 
+}
+
+#[test]
+fn test_add() {
+    assert_eq!(
+        UnsignedDCNumber::from_str("7221.123").unwrap() + UnsignedDCNumber::from_str("2921.92").unwrap(),
+        UnsignedDCNumber::from_str("10143.043").unwrap()
+    );
 }
 
 // impl <'a> num::Zero for UnsignedDCNumber<'a> {
