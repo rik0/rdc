@@ -1,15 +1,17 @@
-use num::{self, ToPrimitive};
+use num::ToPrimitive;
 use std::borrow::Cow;
-use std::fmt::{self, Display};
-use std::cmp::{self, Ordering};
+use std::fmt::Display;
+use std::cmp::{Ordering, max, min};
 use std::error;
 use std::str::FromStr;
 use std::ops::{Add};
-use std::iter;
-use std::iter::Iterator;
-use std::iter::FromIterator;
+use std::iter::{self, Iterator, FromIterator};
+use std::collections::VecDeque;
 
 use std::f32;
+
+const MIN_DIGIT: u8 = 0;
+const MAX_DIGIT: u8 = 9;
 
 // #[derive(Copy, PartialEq, Debug, Clone)]
 // enum Sign {
@@ -41,6 +43,10 @@ macro_rules! static_unsigned_dcnumber {
             separator: ::std::mem::size_of::<$digits_type>(),
         };
     };
+}
+
+macro_rules! udcn {
+    ($digits:expr) => (UnsignedDCNumber::from_str($digits).expect(stringify!($digits)))
 }
 
 static_unsigned_dcnumber![ZERO; ZERO_DIGITS: [u8; 1] = [0]];
@@ -204,7 +210,7 @@ impl<'a> UnsignedDCNumber<'a> {
 fn test_split() {
     assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
     assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
-    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.32").expect("1234.32").split());
+    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), udcn!("1234.32").split());
     assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.320").expect("1234.320").split());
 }
 
@@ -319,16 +325,18 @@ fn test_to_primitive() {
     assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_i64());
 }
 
-fn align_integers<'a, 'b>(lhs: UnsignedDCNumber<'a>, rhs: UnsignedDCNumber<'b>) {
-
-}
-
 
 impl <'a> Add for UnsignedDCNumber<'a> {
     type Output = UnsignedDCNumber<'a>;
 
     fn  add<'b>(self, other: UnsignedDCNumber<'b>) -> Self {
-    
+        use std::cmp::max;
+
+        let self_separator = self.separator;
+        let other_separator = other.separator;
+        let sum_digits_len = max(self.fractional_digits(), other.fractional_digits()) + max(self.integer_magnitude(), other.integer_magnitude());
+        let mut sum_digits= VecDeque::with_capacity(sum_digits_len);
+
         let self_fractional_len = self.fractional_digits();
         let other_fractional_len = other.fractional_digits();
         let fractional_tail: Vec<u8>;
@@ -344,39 +352,53 @@ impl <'a> Add for UnsignedDCNumber<'a> {
             fractional_tail = other_digits.split_off(offset);
         }
 
-        let separator: usize = 0;
-
         let mut carry = false;
+        for (mut lhs, rhs) in self_digits.into_iter().zip(other_digits.into_iter()) {
+            lhs = if carry {
+                let (x, c) = lhs.overflowing_add(1);
+                carry = c;
+                x
+            } else { lhs };
+            // if the +1 caused carry, carry keeps on, but lhs is 0 so no further carry
+            let (x, c) = lhs.overflowing_add(rhs);
+            carry |= c;
+            if x > MAX_DIGIT {
+                debug_assert!(!carry);
+                carry = true;
+                sum_digits.push_back(x - 10);
+            } else {
+                sum_digits.push_back(x)
+            }
+        }
 
-        let mut out = self_digits.into_iter().zip(other_digits).map(|(lhs, rhs)| {
-            lhs
-            // lhs = if carry {
-            //     let (x, c) = lhs.overflowing_add(1);
-            //     carry = c;
-            //     x
-            // } else { lhs }
-            // // if the +1 caused carry, carry keeps on, but lhs is 0 so no further carry
-            // let (x, c) = lhs.overflowing_add(rhs);
-            // carry |= c;
-            // x
-        });
-        let mut digits: Vec<u8> = if carry {
-            out.chain(iter::once(1u8)).collect()
-        } else {
-            out.collect()
-        };
-        digits.extend(fractional_tail);
-        UnsignedDCNumber::new(digits, separator)
+        if carry {
+            sum_digits.push_back(1);
+        }
+
+
+        let separator: usize = max(max(self_separator, other_separator) + if carry {1} else {0} , 1);
+
+        // fractional_tail.into_iter().rev().for_each(|c| sum_digits.push_front(c));
+        UnsignedDCNumber::new(Vec::from(sum_digits), separator)
     } 
 }
 
-#[test]
-fn test_add() {
-    assert_eq!(
-        UnsignedDCNumber::from_str("7221.123").unwrap() + UnsignedDCNumber::from_str("2921.92").unwrap(),
-        UnsignedDCNumber::from_str("10143.043").unwrap()
-    );
+macro_rules! test_binop {
+    ($test_name:ident; $lhs:tt $op:tt $rhs:tt = $expected:tt) => (
+       #[test]
+        fn $test_name() {
+            assert_eq!(
+                udcn![stringify!($expected)],
+                udcn![stringify!($lhs)] $op udcn![stringify!($rhs)],
+            );
+        } 
+    )
 }
+
+test_binop![test_add_zero; 0 + 0 = 0];
+test_binop![test_add; 0 + 1 = 1];
+// test_binop![test_add_f; 7221.123 + 2921.92 = 10143.043];
+
 
 // impl <'a> num::Zero for UnsignedDCNumber<'a> {
 //     fn zero() -> Self {
