@@ -1,14 +1,13 @@
 use num::ToPrimitive;
 use std::borrow::Cow;
-use std::fmt::Display;
-use std::cmp::{Ordering, max, min};
-use std::error;
-use std::str::FromStr;
-use std::ops::{Add};
-use std::iter::{self, Iterator, FromIterator};
+use std::cmp::{max, min, Ordering};
 use std::collections::VecDeque;
-
+use std::error;
 use std::f32;
+use std::fmt::Display;
+use std::iter::{self, FromIterator, Iterator};
+use std::ops::Add;
+use std::str::FromStr;
 
 const MIN_DIGIT: u8 = 0;
 const MAX_DIGIT: u8 = 9;
@@ -32,6 +31,7 @@ pub struct UnsignedDCNumber<'a> {
     // TODO: maybe use nibble?
     // digits are in BigEndian
     digits: Cow<'a, [u8]>,
+    // also consider having a pool for these numbers for memory locality
     separator: usize,
 }
 
@@ -49,27 +49,25 @@ macro_rules! udcn {
     ($digits:expr) => (UnsignedDCNumber::from_str($digits).expect(stringify!($digits)))
 }
 
+// TODO: at some point we want to make a real preallocated space for these
 static_unsigned_dcnumber![ZERO; ZERO_DIGITS: [u8; 1] = [0]];
 static_unsigned_dcnumber![ONE; ONE_DIGITS: [u8; 1] = [1]];
 static_unsigned_dcnumber![MAX_U64; MAX_U64_DIGITS: [u8; 20] = [1,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5]];
 static_unsigned_dcnumber![MAX_I64; MAX_I64_DIGITS: [u8; 19] = [9,2,2,3,3,7,2,0,3,6,8,5,4,7,7,5,8,0,7]];
 
 impl<'a> UnsignedDCNumber<'a> {
-
-    
-    pub fn new<T>(digits: T, last_integer: usize)  -> Self
-    where Cow<'a, [u8]>: From<T>
-    {   
-        UnsignedDCNumber{digits: digits.into(), separator: last_integer}
+    pub fn new<T>(digits: T, last_integer: usize) -> Self
+        where Cow<'a, [u8]>: From<T>
+    {
+        UnsignedDCNumber { digits: digits.into(), separator: last_integer }
     }
 
-    pub fn with_integer_digits<T>(digits: T)  -> Self 
-    where Cow<'a, [u8]>: From<T>
+    pub fn with_integer_digits<T>(digits: T) -> Self
+        where Cow<'a, [u8]>: From<T>
     {
         let digits: Cow<'a, [u8]> = digits.into();
         let size = digits.len();
-        UnsignedDCNumber{digits, separator: size}
-        
+        UnsignedDCNumber { digits, separator: size }
     }
 
     #[allow(dead_code)]
@@ -138,18 +136,17 @@ impl<'a> UnsignedDCNumber<'a> {
         let mut bytes = s.bytes();
 
 
-
-        match bytes.by_ref().enumerate().find(|(i, d)| { if *d != b'0' { true } else { false }}) {
+        match bytes.by_ref().enumerate().find(|(i, d)| { if *d != b'0' { true } else { false } }) {
             None => {
                 // if we are here, it means they are all zeros: we did not find any non zero character
                 return Ok(ZERO.clone());
-            } 
-            Some((0,  b'.')) => {
+            }
+            Some((0, b'.')) => {
                 // TODO: if we do not do this, we will not have a leading 0, which might be desirable
                 digits.push(0);
                 first_dot = Some(1);
             }
-            Some((non_zero_index,  b'.')) => {
+            Some((non_zero_index, b'.')) => {
                 first_dot = Some(non_zero_index);
                 // TODO: if we do not do this, we will not have a leading 0, which might be desirable
                 digits.push(0);
@@ -173,7 +170,7 @@ impl<'a> UnsignedDCNumber<'a> {
                 d @ b'0'...b'9' => digits.push(d - b'0'),
                 b'.' => {
                     if let None = first_dot {
-                        first_dot = Some(i+1);
+                        first_dot = Some(i + 1);
                     } else {
                         return Err(ParseDCNumberError::RepeatedDot);
                     }
@@ -182,10 +179,10 @@ impl<'a> UnsignedDCNumber<'a> {
             }
         }
 
-        
+
         if let Some(..) = first_dot {
             loop {
-                match digits.pop()  {
+                match digits.pop() {
                     Some(0) => {
                         continue;
                     }
@@ -326,21 +323,19 @@ fn test_to_primitive() {
 }
 
 
-impl <'a> Add for UnsignedDCNumber<'a> {
+impl<'a> Add for UnsignedDCNumber<'a> {
     type Output = UnsignedDCNumber<'a>;
 
-    fn  add<'b>(self, other: UnsignedDCNumber<'b>) -> Self {
-        use std::cmp::max;
-
+    fn add<'b>(self, other: UnsignedDCNumber<'b>) -> Self {
         let self_separator = self.separator;
         let other_separator = other.separator;
         let sum_digits_len = max(self.fractional_digits(), other.fractional_digits()) + max(self.integer_magnitude(), other.integer_magnitude());
-        let mut sum_digits= VecDeque::with_capacity(sum_digits_len);
+        let mut sum_digits = VecDeque::with_capacity(sum_digits_len);
 
         let self_fractional_len = self.fractional_digits();
         let other_fractional_len = other.fractional_digits();
         let fractional_tail: Vec<u8>;
-        
+
         let mut self_digits = self.digits.into_owned();
         let mut other_digits = other.digits.into_owned();
 
@@ -358,25 +353,29 @@ impl <'a> Add for UnsignedDCNumber<'a> {
             // alternatives. there's no way to wrap around because lhs and rhs are both < 10.
             // this is unfortunately not enforced. we should have a type for "vector of digits"
             // similarly to how strings are implemented by checking the true nature of the digits.
-            let value = (lhs + rhs + if carry {1} else {0});
-            sum_digits.push_front(value % 10);
-            if (value / 10) > 0 {
-                carry = true
+            let value = lhs + rhs + if carry {
+                carry = false;
+                1
+            } else { 0 };
+            if value >= 10 {
+                debug_assert!(value < 20);
+                carry = true;
+                sum_digits.push_front(value - 10);
             } else {
-                carry = false
+                sum_digits.push_front(value)
             }
-       }
+        }
 
         if carry {
             sum_digits.push_front(1);
         }
 
 
-        let separator: usize = max(max(self_separator, other_separator) + if carry {1} else {0} , 1);
+        let separator: usize = max(max(self_separator, other_separator) + if carry { 1 } else { 0 }, 1);
 
         sum_digits.extend(fractional_tail);
         UnsignedDCNumber::new(Vec::from(sum_digits), separator)
-    } 
+    }
 }
 
 macro_rules! test_binop {
@@ -396,7 +395,7 @@ test_binop![test_add_unit: 1 = 1 + 0];
 test_binop![test_add_unit2: 1 = 0 + 1];
 test_binop![test_integers: 1026 = 520 + 506];
 test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
-test_binop![test_add_f:10143.043 = 7221.123 + 2921.92]  ;
+test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
 
 
 // impl <'a> num::Zero for UnsignedDCNumber<'a> {
@@ -464,7 +463,7 @@ impl<'a> From<u64> for UnsignedDCNumber<'a> {
             for i in 1..n_digits {
                 *digits.get_unchecked_mut(n_digits - i) = (m % 10) as u8;
                 m /= 10;
-            } 
+            }
             *digits.get_unchecked_mut(0) = (m % 10) as u8;
             digits.set_len(n_digits);
         }
@@ -489,7 +488,7 @@ fn test_from_u64_one() {
 fn test_from_u64() {
     let n = UnsignedDCNumber::from(1234567890);
     assert_eq!(
-        UnsignedDCNumber::with_integer_digits([1, 2, 3, 4, 5,6 , 7, 8, 9, 0].as_ref()),
+        UnsignedDCNumber::with_integer_digits([1, 2, 3, 4, 5, 6, 7, 8, 9, 0].as_ref()),
         n
     );
 }
@@ -513,33 +512,33 @@ fn test_from_str() {
     );
 
     assert_eq!(
-         Err(ParseDCNumberError::InvalidDigit),
-         UnsignedDCNumber::from_str("a")
+        Err(ParseDCNumberError::InvalidDigit),
+        UnsignedDCNumber::from_str("a")
     );
 
     assert_eq!(
-         Err(ParseDCNumberError::InvalidDigit),
-         UnsignedDCNumber::from_str("1a")
+        Err(ParseDCNumberError::InvalidDigit),
+        UnsignedDCNumber::from_str("1a")
     );
 
     assert_eq!(
-         Err(ParseDCNumberError::InvalidDigit),
-         UnsignedDCNumber::from_str("0a")
+        Err(ParseDCNumberError::InvalidDigit),
+        UnsignedDCNumber::from_str("0a")
     );
 
     assert_eq!(
-         Err(ParseDCNumberError::InvalidDigit),
-         UnsignedDCNumber::from_str(".a")
+        Err(ParseDCNumberError::InvalidDigit),
+        UnsignedDCNumber::from_str(".a")
     );
 
-        assert_eq!(
+    assert_eq!(
         Err(ParseDCNumberError::RepeatedDot),
-         UnsignedDCNumber::from_str("0..0")
+        UnsignedDCNumber::from_str("0..0")
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
-       UnsignedDCNumber::new([1, 2, 3, 4, 3, 2].as_ref(), 4)
+        UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
+        UnsignedDCNumber::new([1, 2, 3, 4, 3, 2].as_ref(), 4)
     );
 
     assert_eq!(
@@ -553,44 +552,40 @@ fn test_from_str() {
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
-       UnsignedDCNumber::from_str("1234.320").expect("1234.32") 
+        UnsignedDCNumber::from_str("1234.32").expect("1234.32"),
+        UnsignedDCNumber::from_str("1234.320").expect("1234.32")
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str("1234").expect("01234"),
-       UnsignedDCNumber::from_str("1234.0").expect("1234.0") 
+        UnsignedDCNumber::from_str("1234").expect("01234"),
+        UnsignedDCNumber::from_str("1234.0").expect("1234.0")
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str("1234").expect("01234"),
-       UnsignedDCNumber::from_str("1234.").expect("1234.") 
+        UnsignedDCNumber::from_str("1234").expect("01234"),
+        UnsignedDCNumber::from_str("1234.").expect("1234.")
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str(".32").expect(".32"),
-       UnsignedDCNumber::from_str("0.32").expect(".32") 
+        UnsignedDCNumber::from_str(".32").expect(".32"),
+        UnsignedDCNumber::from_str("0.32").expect(".32")
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str(".320").expect(".320"),
-       UnsignedDCNumber::from_str("0.32").expect(".32") 
+        UnsignedDCNumber::from_str(".320").expect(".320"),
+        UnsignedDCNumber::from_str("0.32").expect(".32")
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str("01234.32").expect("01234.32"),
-       UnsignedDCNumber::from_str("1234.32").expect("1234.32") 
+        UnsignedDCNumber::from_str("01234.32").expect("01234.32"),
+        UnsignedDCNumber::from_str("1234.32").expect("1234.32")
     );
 
     assert_eq!(
-       UnsignedDCNumber::from_str("01234.32").expect("01234.32"),
-       UnsignedDCNumber::from_str("1234.320").expect("1234.320") 
+        UnsignedDCNumber::from_str("01234.32").expect("01234.32"),
+        UnsignedDCNumber::from_str("1234.320").expect("1234.320")
     );
-
-
-
 }
-
 
 
 // impl <'a> ToPrimitive for DCNumber<'a> {
