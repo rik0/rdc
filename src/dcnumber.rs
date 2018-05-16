@@ -353,38 +353,34 @@ impl <'a> Add for UnsignedDCNumber<'a> {
         }
 
         let mut carry = false;
-        for (mut lhs, rhs) in self_digits.into_iter().zip(other_digits.into_iter()) {
-            lhs = if carry {
-                let (x, c) = lhs.overflowing_add(1);
-                carry = c;
-                x
-            } else { lhs };
-            // if the +1 caused carry, carry keeps on, but lhs is 0 so no further carry
-            let (x, c) = lhs.overflowing_add(rhs);
-            carry |= c;
-            if x > MAX_DIGIT {
-                debug_assert!(!carry);
-                carry = true;
-                sum_digits.push_back(x - 10);
+        for (mut lhs, rhs) in self_digits.into_iter().rev().zip(other_digits.into_iter().rev()) {
+            // as long as we represent internally as an array of u8, this is cheaper than the
+            // alternatives. there's no way to wrap around because lhs and rhs are both < 10.
+            // this is unfortunately not enforced. we should have a type for "vector of digits"
+            // similarly to how strings are implemented by checking the true nature of the digits.
+            let value = (lhs + rhs + if carry {1} else {0});
+            sum_digits.push_front(value % 10);
+            if (value / 10) > 0 {
+                carry = true
             } else {
-                sum_digits.push_back(x)
+                carry = false
             }
-        }
+       }
 
         if carry {
-            sum_digits.push_back(1);
+            sum_digits.push_front(1);
         }
 
 
         let separator: usize = max(max(self_separator, other_separator) + if carry {1} else {0} , 1);
 
-        // fractional_tail.into_iter().rev().for_each(|c| sum_digits.push_front(c));
+        sum_digits.extend(fractional_tail);
         UnsignedDCNumber::new(Vec::from(sum_digits), separator)
     } 
 }
 
 macro_rules! test_binop {
-    ($test_name:ident; $lhs:tt $op:tt $rhs:tt = $expected:tt) => (
+    ($test_name:ident: $expected:tt = $lhs:tt $op:tt $rhs:tt )  => (
        #[test]
         fn $test_name() {
             assert_eq!(
@@ -395,9 +391,12 @@ macro_rules! test_binop {
     )
 }
 
-test_binop![test_add_zero; 0 + 0 = 0];
-test_binop![test_add; 0 + 1 = 1];
-// test_binop![test_add_f; 7221.123 + 2921.92 = 10143.043];
+test_binop![test_add_zero: 0 = 0 + 0];
+test_binop![test_add_unit: 1 = 1 + 0];
+test_binop![test_add_unit2: 1 = 0 + 1];
+test_binop![test_integers: 1026 = 520 + 506];
+test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
+test_binop![test_add_f:10143.043 = 7221.123 + 2921.92]  ;
 
 
 // impl <'a> num::Zero for UnsignedDCNumber<'a> {
