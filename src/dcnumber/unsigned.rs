@@ -178,6 +178,32 @@ impl<'a> UnsignedDCNumber<'a> {
         Ok(UnsignedDCNumber::new(digits, separator))
     }
 
+
+
+    pub fn from_bytes(bytes: &[u8])-> Result<Self, ParseDCNumberError>  {
+        let no_digits = bytes.len() ;
+        let mut digits = Vec::<u8>::with_capacity(no_digits);
+        let (integer_part, fractional_part) = split_fractional(bytes);
+
+        let first_non_zero = integer_part
+            .iter()
+            .position(|&ch| ch != b'0')
+            .unwrap_or(0);
+        let separator = append_digits(&mut digits, &integer_part[first_non_zero..])?;
+
+        if !fractional_part.is_empty() {
+            let last_non_zero = fractional_part
+                .iter()
+                .skip(1)  // this is the dot
+                .rposition(|&ch| ch != b'0')
+                .unwrap_or(integer_part.len());
+            append_digits(&mut digits, &fractional_part[1..last_non_zero+2])?;
+
+        }
+        Ok(UnsignedDCNumber::new(digits, separator))
+
+    }
+
     pub fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
         if s.is_empty() {
             return Err(ParseDCNumberError::EmptyString);
@@ -187,6 +213,33 @@ impl<'a> UnsignedDCNumber<'a> {
     }
 }
 
+#[inline]
+fn split_fractional(bytes: &[u8]) -> (&[u8], &[u8]) {
+    let dot = bytes.iter().position(|&ch| ch == b'.');
+    match dot {
+        None => {
+            (bytes, &[][..])
+        }
+        Some(dot) => {
+            bytes.split_at(dot)
+        }
+    }
+}
+
+#[inline]
+fn append_digits(digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
+    let mut counter = 0;
+    for &ch in buffer {
+        match ch {
+            ch @ b'0'...b'9' => {
+                digits.push(ch - b'0');
+                counter += 1;
+            }
+            _other => return Err(ParseDCNumberError::InvalidDigit)
+        };
+    }
+    Ok(counter)
+}
 
 
 impl<'a> Default for UnsignedDCNumber<'a> {
@@ -223,6 +276,17 @@ impl<'a> Ord for UnsignedDCNumber<'a> {
 // TODO add similar to test_partial_order for cmp as well
 
 impl<'a> ToPrimitive for UnsignedDCNumber<'a> {
+    fn to_i64(&self) -> Option<i64> {
+        if self.fractional().iter().cloned().any(|d| d != 0) {
+            return None;
+        }
+
+        if self > &MAX_I64 {
+            return None;
+        }
+
+        Some(self.blind_to_u64() as i64)
+    }
     fn to_u64(&self) -> Option<u64> {
         if self.fractional().iter().cloned().any(|d| d != 0) {
             return None;
@@ -234,17 +298,6 @@ impl<'a> ToPrimitive for UnsignedDCNumber<'a> {
         }
 
         Some(self.blind_to_u64())
-    }
-    fn to_i64(&self) -> Option<i64> {
-        if self.fractional().iter().cloned().any(|d| d != 0) {
-            return None;
-        }
-
-        if self > &MAX_I64 {
-            return None;
-        }
-
-        Some(self.blind_to_u64() as i64)
     }
 }
 
@@ -378,7 +431,6 @@ impl<'a> FromStr for UnsignedDCNumber<'a> {
 
 #[cfg(test)]
 mod tests {
-    use test::{self, Bencher};
     use super::*;
 
 
@@ -533,12 +585,47 @@ mod tests {
                 assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_str($digits) );
             }
         );
+
         ($test_name:ident : $expected:expr ; $digits:tt) => (
-            #[test]
-            fn $test_name() {
-                assert_eq!( $expected, udcn!(stringify!($digits)) );
+            mod $test_name {
+                use super::*;
+
+               #[test]
+                fn test_from_string() {
+                    assert_eq!( $expected, udcn!(stringify!($digits)) );
+                }
+
+               #[test]
+                fn test_from_bytes() {
+                    assert_eq!( $expected, UnsignedDCNumber::from_bytes(stringify!($digits).as_ref()).expect(stringify!($digits)));
+                }
             }
+
         );
+    }
+
+    macro_rules! bench_from_str {
+        ($bench_name:ident : $digits: expr) => {
+            mod $bench_name {
+                use test::{Bencher};
+                use super::*;
+
+                #[bench]
+                fn test_from_radix(b: &mut Bencher) {
+                    b.iter(|| {
+                        udcn![$digits];
+                    });
+                }
+
+                #[bench]
+                fn test_from_radix_10(b: &mut Bencher) {
+                    b.iter(|| {
+                        UnsignedDCNumber::from_bytes($digits.as_ref()).expect(stringify!($digits))
+                    });
+                }
+            }
+
+        };
     }
 
     test_from_str![test_from_str_zero: ZERO ; 0];
@@ -573,15 +660,12 @@ mod tests {
             UnsignedDCNumber::from_str("0.32").expect("0.32")
         );
     }
+//
+    bench_from_str![short_int: "3"];
+    bench_from_str![mid_int: "17235428"];
+    bench_from_str![long_int: "172354283422734622371431236441234351267438543781453193415694871634731457681354784531"];
+    bench_from_str![longer_int: "17235428342273462237143123644123435126743854378145319341569487000000000000163473145768135478453123187356412946123041213310238698752341280000000000000000000000"];
 
-
-    #[bench]
-    fn bench_from(b: &mut Bencher) {
-        b.iter(|| {
-            udcn!["17235428"];
-        });
-
-    }
 }
 
 
