@@ -1,3 +1,5 @@
+#![feature(test)]
+extern crate test;
 extern crate bigdecimal;
 extern crate num;
 extern crate num_bigint;

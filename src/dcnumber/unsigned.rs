@@ -1,22 +1,15 @@
+
 use num::ToPrimitive;
 use std::borrow::Cow;
-use std::cmp::{max, min, Ordering};
+use std::cmp::{max, Ordering};
 use std::collections::VecDeque;
-use std::error;
 use std::f32;
-use std::fmt::Display;
-use std::iter::{self, FromIterator, Iterator};
+use std::iter::{self, Iterator};
 use std::ops::Add;
 use std::str::FromStr;
 
 use super::error::ParseDCNumberError;
-
-const MIN_DIGIT: u8 = 0;
-const MAX_DIGIT: u8 = 9;
-
-
-
-
+use std::ops::Range;
 
 #[derive(Clone, Debug)]
 pub struct UnsignedDCNumber<'a> {
@@ -29,7 +22,9 @@ pub struct UnsignedDCNumber<'a> {
 
 macro_rules! static_unsigned_dcnumber {
     ($dcnumber_name:ident; $digits_name:ident : $digits_type:ty = $digits:expr) => {
+        #[allow(dead_code)]
         const $digits_name: $digits_type = $digits;
+        #[allow(dead_code)]
         static $dcnumber_name: UnsignedDCNumber = UnsignedDCNumber {
             digits: Cow::Borrowed(&$digits_name),
             separator: ::std::mem::size_of::<$digits_type>(),
@@ -37,6 +32,7 @@ macro_rules! static_unsigned_dcnumber {
     };
 }
 
+#[cfg(test)]
 macro_rules! udcn {
     ($digits:expr) => (UnsignedDCNumber::from_str($digits).expect(stringify!($digits)))
 }
@@ -115,93 +111,83 @@ impl<'a> UnsignedDCNumber<'a> {
         }
     }
 
-    fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
+
+    pub fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
         assert_eq!(10, radix);
+
         let mut first_dot: Option<usize> = None;
         // use vecdeq preferentially
-        let no_digits = s.len();
+        let no_digits = bytes.len() ;
         let mut digits = Vec::with_capacity(no_digits);
 
+        let mut zero_streak: Option<Range<usize>> = None;
+        let mut seen_non_zero: bool = false;
+        let mut skipped_leading_zeros: usize = 0;
+
+        for (pos, ch) in bytes.iter().enumerate() {
+            match *ch {
+                b'0' => {
+                    zero_streak = match zero_streak {
+                        None => Some(pos..pos+1),
+                        Some(Range{start, ..}) => Some(start   ..pos),
+                    };
+                }
+                ch @ b'1'...b'9' => {
+                    if let Some(Range{start, end}) = zero_streak {
+                        // we should do this after the dot in non terminal position
+                        // and before the dot, but only if we have already seen something non zero
+                        if seen_non_zero || first_dot.is_some() {
+                            digits.extend(iter::repeat(0).take(end-start));
+                        } else if first_dot.is_none() {
+                            skipped_leading_zeros += end - start;
+                        }
+                        zero_streak = None;
+                    }
+                    digits.push(ch - b'0');
+                    seen_non_zero = true;
+                }
+                b'.' => {
+                    if let Some(_) = first_dot {
+                        return Err(ParseDCNumberError::RepeatedDot);
+                    }
+                    if let Some(Range{start, end}) = zero_streak {
+                        // this is a number w
+                        digits.push(0);
+                        skipped_leading_zeros += end - start;
+                        zero_streak = None;
+                    } else if !seen_non_zero {
+                        digits.push(0);
+                    }
+                    first_dot = Some(pos);
+                    seen_non_zero = true;
+                }
+                _ => {
+                    return Err(ParseDCNumberError::InvalidDigit);
+                }
+            }
+        }
+
+        // if we are not after a dot, we must consider the zero streak here
+        if let (Some(Range{start, end}), None) = (zero_streak, first_dot) {
+            digits.extend(iter::repeat(0).take(end-start));
+        }
+
+        let separator = first_dot
+            .map(|len| len - skipped_leading_zeros)
+            .unwrap_or(digits.len());
+        Ok(UnsignedDCNumber::new(digits, separator))
+    }
+
+    pub fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
         if s.is_empty() {
             return Err(ParseDCNumberError::EmptyString);
         }
-        let mut bytes = s.bytes();
 
-
-        match bytes.by_ref().enumerate().find(|(i, d)| { if *d != b'0' { true } else { false } }) {
-            None => {
-                // if we are here, it means they are all zeros: we did not find any non zero character
-                return Ok(ZERO.clone());
-            }
-            Some((0, b'.')) => {
-                // TODO: if we do not do this, we will not have a leading 0, which might be desirable
-                digits.push(0);
-                first_dot = Some(1);
-            }
-            Some((non_zero_index, b'.')) => {
-                first_dot = Some(non_zero_index);
-                // TODO: if we do not do this, we will not have a leading 0, which might be desirable
-                digits.push(0);
-            }
-            Some((_non_zero_index, ch @ b'1'...b'9')) => {
-                digits.push(ch - b'0');
-            }
-            Some((_non_zero_index, _non_zero_byte)) => {
-                return Err(ParseDCNumberError::InvalidDigit);
-            }
-        }
-
-        // if we are here, we have one non zero character:
-        // * if it was dot, we have marked first_dot and added the zero digit
-        // * if it is a valid digit, we have added it among the digits
-        // * if they were all 0s or the first non zero was not a digit, it is a parse error and we
-        //   would not be here
-
-        for (i, ch) in bytes.enumerate() {
-            match ch {
-                d @ b'0'...b'9' => digits.push(d - b'0'),
-                b'.' => {
-                    if let None = first_dot {
-                        first_dot = Some(i + 1);
-                    } else {
-                        return Err(ParseDCNumberError::RepeatedDot);
-                    }
-                }
-                _ => return Err(ParseDCNumberError::InvalidDigit),
-            }
-        }
-
-
-        if let Some(..) = first_dot {
-            loop {
-                match digits.pop() {
-                    Some(0) => {
-                        continue;
-                    }
-                    Some(ch) => {
-                        digits.push(ch);
-                        break;
-                    }
-                    None => {
-                        break;
-                    }
-                }
-            }
-        }
-
-
-        let separator = first_dot.unwrap_or(digits.len());
-        Ok(UnsignedDCNumber::new(digits, separator))
+        UnsignedDCNumber::from_bytes_radix(s.as_ref(), radix)
     }
 }
 
-#[test]
-fn test_split() {
-    assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
-    assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
-    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), udcn!("1234.32").split());
-    assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.320").expect("1234.320").split());
-}
+
 
 impl<'a> Default for UnsignedDCNumber<'a> {
     fn default() -> Self {
@@ -209,10 +195,6 @@ impl<'a> Default for UnsignedDCNumber<'a> {
     }
 }
 
-#[test]
-fn test_default() {
-    assert_eq!(ZERO, UnsignedDCNumber::default());
-}
 
 impl<'a> PartialEq for UnsignedDCNumber<'a> {
     fn eq(&self, other: &Self) -> bool {
@@ -223,17 +205,6 @@ impl<'a> PartialEq for UnsignedDCNumber<'a> {
 impl<'a> Eq for UnsignedDCNumber<'a> {}
 
 
-macro_rules! test_eq {
-    ($test_name:ident : $expected_digits:tt = $digits:tt) => (
-        #[test]
-        fn $test_name() {
-            assert_eq!(
-                udcn![stringify!($expected_digits)],
-                udcn![stringify!($digits)]
-            );
-        }
-    );
-}
 
 impl<'a> PartialOrd for UnsignedDCNumber<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -247,32 +218,7 @@ impl<'a> Ord for UnsignedDCNumber<'a> {
     }
 }
 
-#[test]
-fn test_cmp_unsigned() {
-    assert_eq!(Ordering::Equal, ZERO.cmp_unsigned(&ZERO));
-    assert_eq!(Ordering::Less, ZERO.cmp_unsigned(&ONE));
-    assert_eq!(Ordering::Greater, ONE.cmp_unsigned(&ZERO));
-    assert_eq!(Ordering::Equal, ONE.cmp_unsigned(&ONE));
-}
 
-#[test]
-fn test_eq() {
-    assert_eq!(ZERO, ZERO);
-    assert_eq!(ONE, ONE)
-}
-
-#[test]
-fn test_partial_order() {
-    assert_eq!(Some(Ordering::Less), ZERO.partial_cmp(&ONE));
-    assert_eq!(Some(Ordering::Greater), ONE.partial_cmp(&ZERO));
-    assert_eq!(Some(Ordering::Equal), ZERO.partial_cmp(&ZERO));
-    assert_eq!(Some(Ordering::Less), UnsignedDCNumber::from(213).partial_cmp(&UnsignedDCNumber::from_str("321.12").unwrap()));
-}
-
-#[test]
-fn test_order() {
-    assert!(ZERO < ONE);
-}
 
 // TODO add similar to test_partial_order for cmp as well
 
@@ -302,30 +248,6 @@ impl<'a> ToPrimitive for UnsignedDCNumber<'a> {
     }
 }
 
-#[test]
-fn test_to_primitive() {
-    assert_eq!(0, ZERO.to_u64().expect("u64 zero"));
-    assert_eq!(1, ONE.to_u64().expect("u64 one"));
-    assert_eq!(::std::u64::MAX, MAX_U64.to_u64().expect("u64 max_u64"));
-    assert_eq!(
-        ::std::i64::MAX as u64,
-        MAX_I64.to_u64().expect("u64 max_i64")
-    );
-
-    assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_u64());
-    assert_eq!(None, UnsignedDCNumber::from_str("6125216521678251786215186528167125821752187528175218721582715125214512421532154211624217421765421").expect("huge").to_u64());
-
-    assert_eq!(
-        ::std::i64::MAX as u64 + 1,
-        MAX_I64.to_u64().expect("u64 max_i64") + 1
-    );
-
-    assert_eq!(0, ZERO.to_i64().expect("i64 zero"));
-    assert_eq!(1, ONE.to_i64().expect("i64 one"));
-    assert_eq!(None, MAX_U64.to_i64());
-    assert_eq!(::std::i64::MAX, MAX_I64.to_i64().expect("i64 max_i64"));
-    assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_i64());
-}
 
 
 impl<'a> Add for UnsignedDCNumber<'a> {
@@ -383,24 +305,6 @@ impl<'a> Add for UnsignedDCNumber<'a> {
     }
 }
 
-macro_rules! test_binop {
-    ($test_name:ident: $expected:tt = $lhs:tt $op:tt $rhs:tt )  => (
-       #[test]
-        fn $test_name() {
-            assert_eq!(
-                udcn![stringify!($expected)],
-                udcn![stringify!($lhs)] $op udcn![stringify!($rhs)],
-            );
-        }
-    )
-}
-
-test_binop![test_add_zero: 0 = 0 + 0];
-test_binop![test_add_unit: 1 = 1 + 0];
-test_binop![test_add_unit2: 1 = 0 + 1];
-test_binop![test_integers: 1026 = 520 + 506];
-test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
-test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
 
 
 // impl <'a> num::Zero for UnsignedDCNumber<'a> {
@@ -438,22 +342,6 @@ fn decimal_digits(n: u64) -> u32 {
     }
 }
 
-#[test]
-fn test_decimal_digits() {
-    assert_eq!(0, decimal_digits(0));
-    assert_eq!(1, decimal_digits(1));
-    assert_eq!(2, decimal_digits(22));
-    assert_eq!(3, decimal_digits(311));
-    assert_eq!(4, decimal_digits(4123));
-    assert_eq!(5, decimal_digits(63413));
-    assert_eq!(6, decimal_digits(732142));
-    assert_eq!(7, decimal_digits(9231763));
-    assert_eq!(8, decimal_digits(84985731));
-    assert_eq!(9, decimal_digits(223173622));
-    assert_eq!(10, decimal_digits(1231736322));
-    assert_eq!(19, decimal_digits(::std::i64::MAX as u64));
-    assert_eq!(20, decimal_digits(::std::u64::MAX));
-}
 
 impl<'a> From<u64> for UnsignedDCNumber<'a> {
     fn from(n: u64) -> Self {
@@ -477,26 +365,7 @@ impl<'a> From<u64> for UnsignedDCNumber<'a> {
     }
 }
 
-#[test]
-fn test_from_u64_zero() {
-    let zero = UnsignedDCNumber::from(0);
-    assert_eq!(ZERO, zero);
-}
 
-#[test]
-fn test_from_u64_one() {
-    let one = UnsignedDCNumber::from(1);
-    assert_eq!(ONE, one);
-}
-
-#[test]
-fn test_from_u64() {
-    let n = UnsignedDCNumber::from(1234567890);
-    assert_eq!(
-        UnsignedDCNumber::with_integer_digits([1, 2, 3, 4, 5, 6, 7, 8, 9, 0].as_ref()),
-        n
-    );
-}
 
 impl<'a> FromStr for UnsignedDCNumber<'a> {
     type Err = ParseDCNumberError; // they are decimal floating point afterfall
@@ -507,49 +376,212 @@ impl<'a> FromStr for UnsignedDCNumber<'a> {
 }
 
 
-macro_rules! test_from_str {
-    ($test_name:ident : $error_id:tt <- $digits:tt) => (
-        #[test]
-        fn $test_name() {
-            assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_str($digits) );
-        }
-    );
-    ($test_name:ident : $expected:expr ; $digits:tt) => (
-        #[test]
-        fn $test_name() {
-            assert_eq!( $expected, udcn!(stringify!($digits)) );
-        }
-    );
-}
+#[cfg(test)]
+mod tests {
+    use test::{self, Bencher};
+    use super::*;
 
-test_from_str![test_from_str_zero: ZERO ; 0];
-test_from_str![test_from_str_one:  ONE ; 1];
-test_from_str![test_from_str_byte_spec: UnsignedDCNumber::new([1, 2, 3, 4, 3, 2].as_ref(), 4) ; 1234.32];
-test_from_str![test_from_str_from_int: UnsignedDCNumber::from(1234) ; 1234 ];
-test_from_str![test_from_str_from_int_leading0: UnsignedDCNumber::from(1234) ; 01234];
-test_from_str![test_from_str_empty : EmptyString <- ""];
-test_from_str![test_from_str_a : InvalidDigit <- "a"];
-test_from_str![test_from_str_1a : InvalidDigit <- "1a]"];
-test_from_str![test_from_str_0a : InvalidDigit <- "0a"];
-test_from_str![test_from_str_dota : InvalidDigit <- ".a"];
-test_from_str![test_from_str_0dotdot0: RepeatedDot <- "0..0"];
-test_eq![test_from_tail0 : 1234.32 = 1234.320 ];
-test_eq![test_from_taildot0 : 1234 = 1234.0 ];
-test_eq![test_from_ident : 1234 = 1234.];
-test_eq![test_from_leading0_f : 01234.32 = 1234.32 ];
-test_eq![test_from_leading_tailing_0f : 01234.32 = 1234.320 ];
 
-#[test]
-fn test_from_str() {
-    assert_eq!(
-        UnsignedDCNumber::from_str(".32").expect(".32"),
-        UnsignedDCNumber::from_str("0.32").expect(".32")
-    );
+    #[test]
+    fn test_default() {
+        assert_eq!(ZERO, UnsignedDCNumber::default());
+    }
 
-    assert_eq!(
-        UnsignedDCNumber::from_str(".320").expect(".320"),
-        UnsignedDCNumber::from_str("0.32").expect(".32")
-    );
+    #[test]
+    fn test_split() {
+        assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
+        assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
+        assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), udcn!("1234.32").split());
+        assert_eq!(([1, 2, 3, 4].as_ref(), [3, 2].as_ref()), UnsignedDCNumber::from_str("1234.320").expect("1234.320").split());
+    }
+
+
+
+    macro_rules! test_eq {
+        ($test_name:ident : $expected_digits:tt = $digits:tt) => (
+            #[test]
+            fn $test_name() {
+                assert_eq!(
+                    udcn![stringify!($expected_digits)],
+                    udcn![stringify!($digits)]
+                );
+            }
+        );
+    }
+
+//    #[test]
+//    fn test_equal_not_normalized() {
+//        assert_eq!(
+//            UnsignedDCNumber::new([0, 3, 2].as_ref(), 1),
+//            UnsignedDCNumber::new([3, 2].as_ref(), 0),
+//        );
+//    }
+
+    #[test]
+    fn test_cmp_unsigned() {
+        assert_eq!(Ordering::Equal, ZERO.cmp_unsigned(&ZERO));
+        assert_eq!(Ordering::Less, ZERO.cmp_unsigned(&ONE));
+        assert_eq!(Ordering::Greater, ONE.cmp_unsigned(&ZERO));
+        assert_eq!(Ordering::Equal, ONE.cmp_unsigned(&ONE));
+    }
+
+    #[test]
+    fn test_eq() {
+        assert_eq!(ZERO, ZERO);
+        assert_eq!(ONE, ONE)
+    }
+
+    #[test]
+    fn test_partial_order() {
+        assert_eq!(Some(Ordering::Less), ZERO.partial_cmp(&ONE));
+        assert_eq!(Some(Ordering::Greater), ONE.partial_cmp(&ZERO));
+        assert_eq!(Some(Ordering::Equal), ZERO.partial_cmp(&ZERO));
+        assert_eq!(Some(Ordering::Less), UnsignedDCNumber::from(213).partial_cmp(&UnsignedDCNumber::from_str("321.12").unwrap()));
+    }
+
+    #[test]
+    fn test_order() {
+        assert!(ZERO < ONE);
+    }
+
+    #[test]
+    fn test_to_primitive() {
+        assert_eq!(0, ZERO.to_u64().expect("u64 zero"));
+        assert_eq!(1, ONE.to_u64().expect("u64 one"));
+        assert_eq!(::std::u64::MAX, MAX_U64.to_u64().expect("u64 max_u64"));
+        assert_eq!(
+            ::std::i64::MAX as u64,
+            MAX_I64.to_u64().expect("u64 max_i64")
+        );
+
+        assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_u64());
+        assert_eq!(None, UnsignedDCNumber::from_str("6125216521678251786215186528167125821752187528175218721582715125214512421532154211624217421765421").expect("huge").to_u64());
+
+        assert_eq!(
+            ::std::i64::MAX as u64 + 1,
+            MAX_I64.to_u64().expect("u64 max_i64") + 1
+        );
+
+        assert_eq!(0, ZERO.to_i64().expect("i64 zero"));
+        assert_eq!(1, ONE.to_i64().expect("i64 one"));
+        assert_eq!(None, MAX_U64.to_i64());
+        assert_eq!(::std::i64::MAX, MAX_I64.to_i64().expect("i64 max_i64"));
+        assert_eq!(None, UnsignedDCNumber::from_str("10.1").expect("10.1").to_i64());
+    }
+
+    macro_rules! test_binop {
+        ($test_name:ident: $expected:tt = $lhs:tt $op:tt $rhs:tt )  => (
+           #[test]
+            fn $test_name() {
+                assert_eq!(
+                    udcn![stringify!($expected)],
+                    udcn![stringify!($lhs)] $op udcn![stringify!($rhs)],
+                );
+            }
+        )
+    }
+
+    test_binop![test_add_zero: 0 = 0 + 0];
+    test_binop![test_add_unit: 1 = 1 + 0];
+    test_binop![test_add_unit2: 1 = 0 + 1];
+    test_binop![test_integers: 1026 = 520 + 506];
+    test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
+    test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
+
+    #[test]
+    fn test_decimal_digits() {
+        assert_eq!(0, decimal_digits(0));
+        assert_eq!(1, decimal_digits(1));
+        assert_eq!(2, decimal_digits(22));
+        assert_eq!(3, decimal_digits(311));
+        assert_eq!(4, decimal_digits(4123));
+        assert_eq!(5, decimal_digits(63413));
+        assert_eq!(6, decimal_digits(732142));
+        assert_eq!(7, decimal_digits(9231763));
+        assert_eq!(8, decimal_digits(84985731));
+        assert_eq!(9, decimal_digits(223173622));
+        assert_eq!(10, decimal_digits(1231736322));
+        assert_eq!(19, decimal_digits(::std::i64::MAX as u64));
+        assert_eq!(20, decimal_digits(::std::u64::MAX));
+    }
+
+    #[test]
+    fn test_from_u64_zero() {
+        let zero = UnsignedDCNumber::from(0);
+        assert_eq!(ZERO, zero);
+    }
+
+    #[test]
+    fn test_from_u64_one() {
+        let one = UnsignedDCNumber::from(1);
+        assert_eq!(ONE, one);
+    }
+
+    #[test]
+    fn test_from_u64() {
+        let n = UnsignedDCNumber::from(1234567890);
+        assert_eq!(
+            UnsignedDCNumber::with_integer_digits([1, 2, 3, 4, 5, 6, 7, 8, 9, 0].as_ref()),
+            n
+        );
+    }
+
+    macro_rules! test_from_str {
+        ($test_name:ident : $error_id:tt <- $digits:tt) => (
+            #[test]
+            fn $test_name() {
+                assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_str($digits) );
+            }
+        );
+        ($test_name:ident : $expected:expr ; $digits:tt) => (
+            #[test]
+            fn $test_name() {
+                assert_eq!( $expected, udcn!(stringify!($digits)) );
+            }
+        );
+    }
+
+    test_from_str![test_from_str_zero: ZERO ; 0];
+    test_from_str![test_from_str_one:  ONE ; 1];
+    test_from_str![test_from_str_byte_spec: UnsignedDCNumber::new([1, 2, 3, 4, 3, 2].as_ref(), 4) ; 1234.32];
+    test_from_str![test_from_str_from_int: UnsignedDCNumber::from(1234) ; 1234 ];
+    test_from_str![test_from_str_from_int_leading0: UnsignedDCNumber::from(1234) ; 01234];
+    test_from_str![test_from_str_empty : EmptyString <- ""];
+    test_from_str![test_from_str_a : InvalidDigit <- "a"];
+    test_from_str![test_from_str_1a : InvalidDigit <- "1a]"];
+    test_from_str![test_from_str_0a : InvalidDigit <- "0a"];
+    test_from_str![test_from_str_dota : InvalidDigit <- ".a"];
+    test_from_str![test_from_str_0dotdot0: RepeatedDot <- "0..0"];
+    test_eq![test_from_tail0 : 1234.32 = 1234.320 ];
+    test_eq![test_from_taildot0 : 1234 = 1234.0 ];
+    test_eq![test_from_ident : 1234 = 1234.];
+    test_eq![test_from_leading0_f : 01234.32 = 1234.32 ];
+    test_eq![test_from_leading_tailing_0f : 01234.32 = 1234.320 ];
+
+    #[test]
+    fn test_from_str_dot32() {
+        assert_eq!(
+            UnsignedDCNumber::from_str(".32").expect(".32"),
+            UnsignedDCNumber::from_str("0.32").expect("0.32")
+        );
+    }
+
+    #[test]
+    fn test_from_str_dot320() {
+        assert_eq!(
+            UnsignedDCNumber::from_str(".320").expect(".320"),
+            UnsignedDCNumber::from_str("0.32").expect("0.32")
+        );
+    }
+
+
+    #[bench]
+    fn bench_from(b: &mut Bencher) {
+        b.iter(|| {
+            udcn!["17235428"];
+        });
+
+    }
 }
 
 
