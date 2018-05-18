@@ -115,7 +115,7 @@ impl<'a> UnsignedDCNumber<'a> {
     pub fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
         assert_eq!(10, radix);
 
-        DecAsciiConverter::from_bytes(bytes)
+        DecAsciiConverter{}.from_bytes(bytes)
     }
 
 
@@ -195,12 +195,12 @@ impl<'a> UnsignedDCNumber<'a> {
 }
 
 trait AsciiConverter {
-    fn append_digits(digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError>;
-    fn from_bytes<'a, 'b>(bytes: &'a [u8]) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
+    fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError>;
+    fn from_bytes<'a, 'b>(&self, bytes: &'a [u8]) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
         if bytes.is_empty() {
             return Err(ParseDCNumberError::EmptyString);
         }
-        
+
         let no_digits = bytes.len() ;
         let mut digits = Vec::<u8>::with_capacity(no_digits);
         let (integer_part, fractional_part) = split_fractional(bytes);
@@ -208,13 +208,13 @@ trait AsciiConverter {
         let separator = integer_part
             .iter()
             .position(|&ch| ch != b'0')
-            .map(|separator| Self::append_digits(&mut digits, &integer_part[separator..]))
+            .map(|separator| self.append_digits(&mut digits, &integer_part[separator..]))
             .unwrap_or_else(|| { digits.push(0); Ok(1) })?;
         let _fractional_items = fractional_part
             .iter()
             .skip(1)  // this is the dot
             .rposition(|&ch| ch != b'0')
-            .map(|last_non_zero| Self::append_digits(&mut digits, &fractional_part[1..last_non_zero+2]))
+            .map(|last_non_zero| self.append_digits(&mut digits, &fractional_part[1..last_non_zero+2]))
             .unwrap_or(Ok(0))?;
         Ok(UnsignedDCNumber::new(digits, separator))
     }
@@ -240,7 +240,7 @@ struct DecAsciiConverter {
 
 impl AsciiConverter for DecAsciiConverter {
     #[inline]
-    fn append_digits(digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
+    fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
         let mut counter = 0;
         for &ch in buffer {
             match ch {
