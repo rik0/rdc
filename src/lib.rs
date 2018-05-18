@@ -1,5 +1,8 @@
-#![feature(test)]
+#![cfg_attr(all(feature = "nightly", test), feature(test))]
+
+#[cfg(all(feature = "nightly", test))]
 extern crate test;
+
 extern crate bigdecimal;
 extern crate num;
 extern crate num_bigint;

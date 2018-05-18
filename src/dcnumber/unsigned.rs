@@ -606,6 +606,7 @@ mod tests {
 
     macro_rules! bench_from_str {
         ($bench_name:ident : $digits: expr) => {
+            #[cfg(all(feature = "nightly", test))]
             mod $bench_name {
                 use test::{Bencher};
                 use super::*;
