@@ -625,14 +625,30 @@ mod tests {
                 use super::*;
 
                #[test]
-                fn test_from_string() {
+                fn test_ucdn() {
                     assert_eq!( $expected, udcn!(stringify!($digits)) );
                 }
 
-               #[test]
+                #[test]
                 fn test_from_bytes() {
                     assert_eq!( $expected, UnsignedDCNumber::from_bytes(stringify!($digits).as_ref()).expect(stringify!($digits)));
                 }
+
+                #[test]
+                fn test_from_bytes_radix() {
+                    assert_eq!( $expected, UnsignedDCNumber::from_bytes_radix(stringify!($digits).as_ref(), 10).expect(stringify!($digits)));
+                }
+
+                #[test]
+                fn test_from_str() {
+                    assert_eq!( $expected, UnsignedDCNumber::from_str(stringify!($digits).as_ref()).expect(stringify!($digits)));
+                }
+
+                #[test]
+                fn test_from_str_radix() {
+                    assert_eq!( $expected, UnsignedDCNumber::from_str_radix(stringify!($digits).as_ref(), 10).expect(stringify!($digits)));
+                }
+
             }
 
         );
@@ -646,16 +662,37 @@ mod tests {
                 use super::*;
 
                 #[bench]
-                fn test_from_radix(b: &mut Bencher) {
+                fn test_udcn(b: &mut Bencher) {
                     b.iter(|| {
                         udcn![$digits];
                     });
                 }
 
                 #[bench]
-                fn test_from_radix_10(b: &mut Bencher) {
+                fn test_from_bytes(b: &mut Bencher) {
                     b.iter(|| {
                         UnsignedDCNumber::from_bytes($digits.as_ref()).expect(stringify!($digits))
+                    });
+                }
+
+                #[bench]
+                fn test_from_bytes_radix_10(b: &mut Bencher) {
+                    b.iter(|| {
+                        UnsignedDCNumber::from_bytes_radix($digits.as_ref(), 10).expect(stringify!($digits))
+                    });
+                }
+
+                #[bench]
+                fn test_from_str(b: &mut Bencher) {
+                    b.iter(|| {
+                        UnsignedDCNumber::from_str($digits.as_ref()).expect(stringify!($digits))
+                    });
+                }
+
+                #[bench]
+                fn test_from_str_radix_10(b: &mut Bencher) {
+                    b.iter(|| {
+                        UnsignedDCNumber::from_str_radix($digits.as_ref(), 10).expect(stringify!($digits))
                     });
                 }
             }
