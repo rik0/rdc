@@ -120,6 +120,10 @@ impl<'a> UnsignedDCNumber<'a> {
 
 
     pub fn from_bytes(bytes: &[u8])-> Result<Self, ParseDCNumberError>  {
+        if bytes.is_empty() {
+            return Err(ParseDCNumberError::EmptyString);
+        }
+
         let mut first_dot: Option<usize> = None;
         // use vecdeq preferentially
         let no_digits = bytes.len() ;
@@ -184,9 +188,7 @@ impl<'a> UnsignedDCNumber<'a> {
     }
 
     pub fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
-        if s.is_empty() {
-            return Err(ParseDCNumberError::EmptyString);
-        }
+
 
         UnsignedDCNumber::from_bytes_radix(s.as_ref(), radix)
     }
@@ -195,6 +197,10 @@ impl<'a> UnsignedDCNumber<'a> {
 trait AsciiConverter {
     fn append_digits(digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError>;
     fn from_bytes<'a, 'b>(bytes: &'a [u8]) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
+        if bytes.is_empty() {
+            return Err(ParseDCNumberError::EmptyString);
+        }
+        
         let no_digits = bytes.len() ;
         let mut digits = Vec::<u8>::with_capacity(no_digits);
         let (integer_part, fractional_part) = split_fractional(bytes);
@@ -598,10 +604,20 @@ mod tests {
 
     macro_rules! test_from_str {
         ($test_name:ident : $error_id:tt <- $digits:tt) => (
-            #[test]
-            fn $test_name() {
-                assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_str($digits) );
+            mod $test_name {
+                use super::*;
+
+                #[test]
+                fn test_from_str() {
+                    assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_str($digits) );
+                }
+
+                #[test]
+                fn test_from_bytes() {
+                    assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_bytes($digits.as_ref()) );
+                }
             }
+
         );
 
         ($test_name:ident : $expected:expr ; $digits:tt) => (
