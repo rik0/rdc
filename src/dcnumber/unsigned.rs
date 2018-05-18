@@ -115,6 +115,13 @@ impl<'a> UnsignedDCNumber<'a> {
     pub fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
         assert_eq!(10, radix);
 
+        DecAsciiConverter::from_bytes(bytes)
+    }
+
+
+
+
+    pub fn from_bytes(bytes: &[u8])-> Result<Self, ParseDCNumberError>  {
         let mut first_dot: Option<usize> = None;
         // use vecdeq preferentially
         let no_digits = bytes.len() ;
@@ -178,32 +185,6 @@ impl<'a> UnsignedDCNumber<'a> {
         Ok(UnsignedDCNumber::new(digits, separator))
     }
 
-
-
-    pub fn from_bytes(bytes: &[u8])-> Result<Self, ParseDCNumberError>  {
-        let no_digits = bytes.len() ;
-        let mut digits = Vec::<u8>::with_capacity(no_digits);
-        let (integer_part, fractional_part) = split_fractional(bytes);
-
-        let first_non_zero = integer_part
-            .iter()
-            .position(|&ch| ch != b'0')
-            .unwrap_or(0);
-        let separator = append_digits(&mut digits, &integer_part[first_non_zero..])?;
-
-        if !fractional_part.is_empty() {
-            let last_non_zero = fractional_part
-                .iter()
-                .skip(1)  // this is the dot
-                .rposition(|&ch| ch != b'0')
-                .unwrap_or(integer_part.len());
-            append_digits(&mut digits, &fractional_part[1..last_non_zero+2])?;
-
-        }
-        Ok(UnsignedDCNumber::new(digits, separator))
-
-    }
-
     pub fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
         if s.is_empty() {
             return Err(ParseDCNumberError::EmptyString);
@@ -213,32 +194,50 @@ impl<'a> UnsignedDCNumber<'a> {
     }
 }
 
-#[inline]
-fn split_fractional(bytes: &[u8]) -> (&[u8], &[u8]) {
-    let dot = bytes.iter().position(|&ch| ch == b'.');
-    match dot {
-        None => {
-            (bytes, &[][..])
-        }
-        Some(dot) => {
-            bytes.split_at(dot)
-        }
-    }
+trait AsciiConverter {
+    fn append_digits(digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError>;
+    fn from_bytes<'a, 'b>(bytes: &'a[u8]) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError>;
 }
 
-#[inline]
-fn append_digits(digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
-    let mut counter = 0;
-    for &ch in buffer {
-        match ch {
-            ch @ b'0'...b'9' => {
-                digits.push(ch - b'0');
-                counter += 1;
-            }
-            _other => return Err(ParseDCNumberError::InvalidDigit)
-        };
+struct DecAsciiConverter {
+
+}
+
+impl AsciiConverter for DecAsciiConverter {
+    #[inline]
+    fn append_digits(digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
+        let mut counter = 0;
+        for &ch in buffer {
+            match ch {
+                ch @ b'0'...b'9' => {
+                    digits.push(ch - b'0');
+                    counter += 1;
+                }
+                b'.' => return Err(ParseDCNumberError::RepeatedDot),
+                _other => return Err(ParseDCNumberError::InvalidDigit),
+            };
+        }
+        Ok(counter)
     }
-    Ok(counter)
+
+    fn from_bytes<'a, 'b>(bytes: &'a [u8]) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
+        let no_digits = bytes.len() ;
+        let mut digits = Vec::<u8>::with_capacity(no_digits);
+        let (integer_part, fractional_part) = split_fractional(bytes);
+
+        let separator = integer_part
+            .iter()
+            .position(|&ch| ch != b'0')
+            .map(|separator| Self::append_digits(&mut digits, &integer_part[separator..]))
+            .unwrap_or_else(|| { digits.push(0); Ok(1) })?;
+        let _fractional_items = fractional_part
+            .iter()
+            .skip(1)  // this is the dot
+            .rposition(|&ch| ch != b'0')
+            .map(|last_non_zero| Self::append_digits(&mut digits, &fractional_part[1..last_non_zero+2]))
+            .unwrap_or(Ok(0))?;
+        Ok(UnsignedDCNumber::new(digits, separator))
+    }
 }
 
 
