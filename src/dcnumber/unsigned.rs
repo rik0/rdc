@@ -608,13 +608,24 @@ mod tests {
                 use super::*;
 
                 #[test]
-                fn test_from_str() {
+                fn from_str() {
                     assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_str($digits) );
                 }
 
                 #[test]
-                fn test_from_bytes() {
+                fn from_bytes() {
                     assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_bytes($digits.as_ref()) );
+                }
+
+
+                #[test]
+                fn from_str_radix() {
+                    assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_str_radix($digits, 10) );
+                }
+
+                #[test]
+                fn from_bytes_radix() {
+                    assert_eq!( Err(ParseDCNumberError::$error_id), UnsignedDCNumber::from_bytes_radix($digits.as_ref(), 10) );
                 }
             }
 
@@ -625,7 +636,7 @@ mod tests {
                 use super::*;
 
                #[test]
-                fn test_ucdn() {
+                fn ucdn() {
                     assert_eq!( $expected, udcn!(stringify!($digits)) );
                 }
 
@@ -635,17 +646,17 @@ mod tests {
                 }
 
                 #[test]
-                fn test_from_bytes_radix() {
+                fn from_bytes_radix() {
                     assert_eq!( $expected, UnsignedDCNumber::from_bytes_radix(stringify!($digits).as_ref(), 10).expect(stringify!($digits)));
                 }
 
                 #[test]
-                fn test_from_str() {
+                fn from_str() {
                     assert_eq!( $expected, UnsignedDCNumber::from_str(stringify!($digits).as_ref()).expect(stringify!($digits)));
                 }
 
                 #[test]
-                fn test_from_str_radix() {
+                fn from_str_radix() {
                     assert_eq!( $expected, UnsignedDCNumber::from_str_radix(stringify!($digits).as_ref(), 10).expect(stringify!($digits)));
                 }
 
