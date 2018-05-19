@@ -412,22 +412,40 @@ mod radix_converters {
         fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
             let mut counter = 0;
             let decimal_range_top = b'0' + self.radix;
-            let extended_range_top = b'A' - (self.radix - 11);
+            let extended_range_top = b'A' + (self.radix - 11);
 
-            for &ch in buffer {
+            let mut carry: u8 = 0;
+            for &ch in buffer.iter().rev() {
                 match ch {
                     ch @ b'0'...b'9' if ch <= decimal_range_top => {
-                        digits.push(ch - b'0');
+                        let mut digital_value = ch - b'0' + carry;
+                        carry = 0;
+                        if digital_value >= 0 {
+                            digital_value -= 10;
+                            carry = 1;
+                        }
+                        digits.push(digital_value);
                         counter += 1;
                     }
                     ch @ b'A'...b'F' if ch <= extended_range_top => {
-                        digits.push(ch - b'A');
+                        let mut digit_value = ch - b'A' + 10 + carry;
+                        carry = 0;
+                        if digit_value >= 10 {
+                            digit_value -= 10;
+                            carry = 1;
+                        }
+                        digits.push(digit_value);
                         counter += 1;
                     }
                     b'.' => return Err(ParseDCNumberError::RepeatedDot),
                     _other => return Err(ParseDCNumberError::InvalidDigit),
                 };
             }
+            if carry > 0 {
+                digits.push(1);
+                counter += 1;
+            }
+            digits.reverse();
             Ok(counter)
         }
     }
@@ -589,6 +607,9 @@ mod tests {
         );
     }
 
+
+
+// TODO: fix me
 //    #[test]
 //    fn test_equal_not_normalized() {
 //        assert_eq!(
@@ -849,6 +870,20 @@ mod tests {
     }
 
     // write test for from_bytes with various bases
+
+    macro_rules! from_bytes_radix {
+        ($test_name:ident: $decimal_digits:tt = $digits:tt : $radix:expr  ) => {
+            #[test]
+            fn $test_name() {
+                assert_eq!(
+                    UnsignedDCNumber::from_bytes(stringify!($decimal_digits).as_ref()).expect(stringify!($decimal_digits)),
+                    UnsignedDCNumber::from_bytes_radix(stringify!($digits).as_ref(), $radix).expect(stringify!($digits)),
+                );
+            }
+        };
+    }
+
+    from_bytes_radix![first_hex: 10 = A: 16];
 
     bench_from_str![short_int: "3"];
     bench_from_str![mid_int: "17235428"];

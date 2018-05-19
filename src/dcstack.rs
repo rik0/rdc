@@ -158,45 +158,6 @@ define_error_type![DCError;
             InternalConversionError: "internal conversion error"
             ];
 
-// #[derive(Clone, Debug, Copy, PartialEq)]
-// pub enum DCError {
-//     StackEmpty,
-//     NonNumericValue,
-//     NonStringValue,
-//     NumParseError,
-//     InternalConversionError,
-// }
-// static STACK_EMPTY: &'static str = "stack empty";
-// static NON_NUMERIC_VALUE: &'static str = "non numeric value";
-// static NON_STRING_VALUE: &'static str = "non string value";
-// static NUM_PARSE_ERROR: &'static str = "bytes do not represent a number";
-// static INTERNAL_CONVERSION_ERROR: &'static str = "internal conversion error";
-
-// impl DCError {
-//     pub fn message(&self) -> &'static str {
-//         match self {
-//             &DCError::StackEmpty => &STACK_EMPTY,
-//             &DCError::NonNumericValue => &NON_NUMERIC_VALUE,
-//             &DCError::NonStringValue => &NON_STRING_VALUE,
-//             &DCError::NumParseError => &NUM_PARSE_ERROR,
-//             &DCError::InternalConversionError => &INTERNAL_CONVERSION_ERROR,
-//         }
-//     }
-// }
-
-// impl fmt::Display for DCError {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-//         write!(f, "{}", self.message())?;
-//         Ok(())
-//     }
-// }
-
-// impl error::Error for DCError {
-//     fn description(&self) -> &str {
-//         self.message()
-//     }
-// }
-
 #[cfg(test)]
 macro_rules! dcstack_num {
     ( $ ( $ x : expr ) , * ) => ({
