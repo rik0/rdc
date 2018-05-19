@@ -475,12 +475,41 @@ mod tests {
 
     macro_rules! test_eq {
         ($test_name:ident : $expected_digits:tt = $digits:tt) => (
-            #[test]
-            fn $test_name() {
-                assert_eq!(
-                    udcn![stringify!($expected_digits)],
-                    udcn![stringify!($digits)]
-                );
+            mod $test_name {
+            use super::*;
+                #[test]
+                fn eq() {
+                    // the purpose of this test is to test equality of things expected equal
+                    assert_eq!(
+                        udcn![stringify!($expected_digits)],
+                        udcn![stringify!($digits)]
+                    );
+                }
+
+                // these tests keep in sync the various implementations
+                #[test]
+                fn str_radix_bytes_radix() {
+                   assert_eq!(
+                       UnsignedDCNumber::from_str_radix(stringify!($digits).as_ref(), 10).expect(stringify!($digits)),
+                       UnsignedDCNumber::from_bytes_radix(stringify!($digits).as_ref(), 10).expect(stringify!($digits)),
+                   );
+                }
+
+                #[test]
+                fn str_bytes() {
+                   assert_eq!(
+                       UnsignedDCNumber::from_str(stringify!($digits).as_ref()).expect(stringify!($digits)),
+                       UnsignedDCNumber::from_bytes(stringify!($digits).as_ref()).expect(stringify!($digits)),
+                   );
+                }
+
+                #[test]
+                fn str_bytes_radix() {
+                   assert_eq!(
+                       UnsignedDCNumber::from_str(stringify!($digits).as_ref()).expect(stringify!($digits)),
+                       UnsignedDCNumber::from_bytes_radix(stringify!($digits).as_ref(), 10).expect(stringify!($digits)),
+                   );
+                }
             }
         );
     }
