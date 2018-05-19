@@ -1,4 +1,3 @@
-
 use num::ToPrimitive;
 use std::borrow::Cow;
 use std::cmp::{max, Ordering};
@@ -6,10 +5,10 @@ use std::collections::VecDeque;
 use std::f32;
 use std::iter::{self, Iterator};
 use std::ops::Add;
-use std::str::FromStr;
-
-use super::error::ParseDCNumberError;
 use std::ops::Range;
+use std::str::FromStr;
+use super::error::ParseDCNumberError;
+use super::traits::FromBytes;
 
 #[derive(Clone, Debug)]
 pub struct UnsignedDCNumber<'a> {
@@ -112,157 +111,10 @@ impl<'a> UnsignedDCNumber<'a> {
     }
 
 
-    pub fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
-        assert_eq!(10, radix);
-
-        DecAsciiConverter{}.from_bytes(bytes)
-    }
-
-
-    pub fn from_bytes(bytes: &[u8])-> Result<Self, ParseDCNumberError>  {
-        if bytes.is_empty() {
-            return Err(ParseDCNumberError::EmptyString);
-        }
-
-        let mut first_dot: Option<usize> = None;
-        // use vecdeq preferentially
-        let no_digits = bytes.len() ;
-        let mut digits = Vec::with_capacity(no_digits);
-
-        let mut zero_streak: Option<Range<usize>> = None;
-        let mut seen_non_zero: bool = false;
-        let mut skipped_leading_zeros: usize = 0;
-
-        for (pos, ch) in bytes.iter().enumerate() {
-            match *ch {
-                b'0' => {
-                    zero_streak = match zero_streak {
-                        None => Some(pos..pos+1),
-                        Some(Range{start, ..}) => Some(start   ..pos),
-                    };
-                }
-                ch @ b'1'...b'9' => {
-                    if let Some(Range{start, end}) = zero_streak {
-                        // we should do this after the dot in non terminal position
-                        // and before the dot, but only if we have already seen something non zero
-                        if seen_non_zero || first_dot.is_some() {
-                            digits.extend(iter::repeat(0).take(end-start));
-                        } else if first_dot.is_none() {
-                            skipped_leading_zeros += end - start;
-                        }
-                        zero_streak = None;
-                    }
-                    digits.push(ch - b'0');
-                    seen_non_zero = true;
-                }
-                b'.' => {
-                    if let Some(_) = first_dot {
-                        return Err(ParseDCNumberError::RepeatedDot);
-                    }
-                    if let Some(Range{start, end}) = zero_streak {
-                        // this is a number w
-                        digits.push(0);
-                        skipped_leading_zeros += end - start;
-                        zero_streak = None;
-                    } else if !seen_non_zero {
-                        digits.push(0);
-                    }
-                    first_dot = Some(pos);
-                    seen_non_zero = true;
-                }
-                _ => {
-                    return Err(ParseDCNumberError::InvalidDigit);
-                }
-            }
-        }
-
-        // if we are not after a dot, we must consider the zero streak here
-        if let (Some(Range{start, end}), None) = (zero_streak, first_dot) {
-            digits.extend(iter::repeat(0).take(end-start));
-        }
-
-        let separator = first_dot
-            .map(|len| len - skipped_leading_zeros)
-            .unwrap_or(digits.len());
-        Ok(UnsignedDCNumber::new(digits, separator))
-    }
-
-    pub fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
-
-
-        UnsignedDCNumber::from_bytes_radix(s.as_ref(), radix)
-    }
-}
-
-trait AsciiConverter {
-    fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError>;
-    fn from_bytes<'a, 'b>(&self, bytes: &'a [u8]) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
-        if bytes.is_empty() {
-            return Err(ParseDCNumberError::EmptyString);
-        }
-
-        let no_digits = bytes.len() ;
-        let mut digits = Vec::<u8>::with_capacity(no_digits);
-        let (integer_part, fractional_part) = split_fractional(bytes);
-
-        let separator = integer_part
-            .iter()
-            .position(|&ch| ch != b'0')
-            .map(|separator| self.append_digits(&mut digits, &integer_part[separator..]))
-            .unwrap_or_else(|| { digits.push(0); Ok(1) })?;
-        let _fractional_items = fractional_part
-            .iter()
-            .skip(1)  // this is the dot
-            .rposition(|&ch| ch != b'0')
-            .map(|last_non_zero| self.append_digits(&mut digits, &fractional_part[1..last_non_zero+2]))
-            .unwrap_or(Ok(0))?;
-        Ok(UnsignedDCNumber::new(digits, separator))
-    }
-}
-
-#[inline]
-fn split_fractional(bytes: &[u8]) -> (&[u8], &[u8]) {
-    let dot = bytes.iter().position(|&ch| ch == b'.');
-    match dot {
-        None => {
-            (bytes, &[][..])
-        }
-        Some(dot) => {
-            bytes.split_at(dot)
-        }
-    }
-}
-
-#[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
-struct DecAsciiConverter {
-
-}
-
-impl AsciiConverter for DecAsciiConverter {
-    #[inline]
-    fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
-        let mut counter = 0;
-        for &ch in buffer {
-            match ch {
-                ch @ b'0'...b'9' => {
-                    digits.push(ch - b'0');
-                    counter += 1;
-                }
-                b'.' => return Err(ParseDCNumberError::RepeatedDot),
-                _other => return Err(ParseDCNumberError::InvalidDigit),
-            };
-        }
-        Ok(counter)
-    }
-
-
 }
 
 
-#[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
-struct RadixAsciiConverter {
-   radix: u32
-}
+
 
 
 
@@ -443,20 +295,243 @@ impl<'a> From<u64> for UnsignedDCNumber<'a> {
 }
 
 
+mod radix_converters {
+    use super::{ParseDCNumberError, UnsignedDCNumber};
 
-impl<'a> FromStr for UnsignedDCNumber<'a> {
-    type Err = ParseDCNumberError; // they are decimal floating point afterfall
+    pub trait AsciiConverter {
+        fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError>;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        UnsignedDCNumber::from_str_radix(s, 10)
+        fn convert_bytes<'a, 'b>(&self, bytes: &'a [u8]) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
+            if bytes.is_empty() {
+                return Err(ParseDCNumberError::EmptyString);
+            }
+
+            let no_digits = bytes.len();
+            let mut digits = Vec::<u8>::with_capacity(no_digits);
+            let (integer_part, fractional_part) = split_fractional(bytes);
+
+            let separator = integer_part
+                .iter()
+                .position(|&ch| ch != b'0')
+                .map(|separator| self.append_digits(&mut digits, &integer_part[separator..]))
+                .unwrap_or_else(|| {
+                    digits.push(0);
+                    Ok(1)
+                })?;
+            let _fractional_items = fractional_part
+                .iter()
+                .skip(1)  // this is the dot
+                .rposition(|&ch| ch != b'0')
+                .map(|last_non_zero| self.append_digits(&mut digits, &fractional_part[1..last_non_zero + 2]))
+                .unwrap_or(Ok(0))?;
+            Ok(UnsignedDCNumber::new(digits, separator))
+        }
+    }
+
+    #[inline]
+    fn split_fractional(bytes: &[u8]) -> (&[u8], &[u8]) {
+        let dot = bytes.iter().position(|&ch| ch == b'.');
+        match dot {
+            None => {
+                (bytes, &[][..])
+            }
+            Some(dot) => {
+                bytes.split_at(dot)
+            }
+        }
+    }
+
+    #[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
+    struct DecAsciiConverter {}
+
+    impl AsciiConverter for DecAsciiConverter {
+        #[inline]
+        fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
+            let mut counter = 0;
+            for &ch in buffer {
+                match ch {
+                    ch @ b'0'...b'9' => {
+                        digits.push(ch - b'0');
+                        counter += 1;
+                    }
+                    b'.' => return Err(ParseDCNumberError::RepeatedDot),
+                    _other => return Err(ParseDCNumberError::InvalidDigit),
+                };
+            }
+            Ok(counter)
+        }
+    }
+
+
+    #[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
+    pub struct Small {
+        radix: u8
+    }
+
+    impl Small {
+        pub fn new(radix: u8) -> Self {
+            assert!(radix <= 10 && radix >= 2);
+            Self { radix }
+        }
+    }
+
+    impl AsciiConverter for Small {
+        #[inline]
+        fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
+            let mut counter = 0;
+            let range_top = b'0' + self.radix;
+            for &ch in buffer {
+                match ch {
+                    ch @ b'0'...b'9' if ch <= range_top => {
+                        digits.push(ch - b'0');
+                        counter += 1;
+                    }
+                    b'.' => return Err(ParseDCNumberError::RepeatedDot),
+                    _other => return Err(ParseDCNumberError::InvalidDigit),
+                };
+            }
+            Ok(counter)
+        }
+    }
+
+
+    #[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
+    pub struct Large {
+        radix: u8
+    }
+
+    impl Large {
+        pub fn new(radix: u8) -> Self {
+            assert!(radix >= 11 && radix <= 16);
+            Self { radix }
+        }
+    }
+
+    impl AsciiConverter for Large {
+        #[inline]
+        fn append_digits(&self, digits: &mut Vec<u8>, buffer: &[u8]) -> Result<usize, ParseDCNumberError> {
+            let mut counter = 0;
+            let decimal_range_top = b'0' + self.radix;
+            let extended_range_top = b'A' - (self.radix - 11);
+
+            for &ch in buffer {
+                match ch {
+                    ch @ b'0'...b'9' if ch <= decimal_range_top => {
+                        digits.push(ch - b'0');
+                        counter += 1;
+                    }
+                    ch @ b'A'...b'F' if ch <= extended_range_top => {
+                        digits.push(ch - b'A');
+                        counter += 1;
+                    }
+                    b'.' => return Err(ParseDCNumberError::RepeatedDot),
+                    _other => return Err(ParseDCNumberError::InvalidDigit),
+                };
+            }
+            Ok(counter)
+        }
     }
 }
+
+impl<'a> FromBytes for UnsignedDCNumber<'a> {
+    type Err = ParseDCNumberError;
+
+    fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
+        use self::radix_converters::AsciiConverter;
+
+        match radix {
+            2...10 => radix_converters::Small::new(radix as u8).convert_bytes(bytes),
+            11...16 => radix_converters::Large::new(radix as u8).convert_bytes(bytes),
+            _ => Err(ParseDCNumberError::InvalidRadix)
+        }
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self, ParseDCNumberError> {
+        if bytes.is_empty() {
+            return Err(ParseDCNumberError::EmptyString);
+        }
+
+        let mut first_dot: Option<usize> = None;
+        // use vecdeq preferentially
+        let no_digits = bytes.len();
+        let mut digits = Vec::with_capacity(no_digits);
+
+        let mut zero_streak: Option<Range<usize>> = None;
+        let mut seen_non_zero: bool = false;
+        let mut skipped_leading_zeros: usize = 0;
+
+        for (pos, ch) in bytes.iter().enumerate() {
+            match *ch {
+                b'0' => {
+                    zero_streak = match zero_streak {
+                        None => Some(pos..pos + 1),
+                        Some(Range { start, .. }) => Some(start..pos),
+                    };
+                }
+                ch @ b'1'...b'9' => {
+                    if let Some(Range { start, end }) = zero_streak {
+                        // we should do this after the dot in non terminal position
+                        // and before the dot, but only if we have already seen something non zero
+                        if seen_non_zero || first_dot.is_some() {
+                            digits.extend(iter::repeat(0).take(end - start));
+                        } else if first_dot.is_none() {
+                            skipped_leading_zeros += end - start;
+                        }
+                        zero_streak = None;
+                    }
+                    digits.push(ch - b'0');
+                    seen_non_zero = true;
+                }
+                b'.' => {
+                    if let Some(_) = first_dot {
+                        return Err(ParseDCNumberError::RepeatedDot);
+                    }
+                    if let Some(Range { start, end }) = zero_streak {
+                        // this is a number w
+                        digits.push(0);
+                        skipped_leading_zeros += end - start;
+                        zero_streak = None;
+                    } else if !seen_non_zero {
+                        digits.push(0);
+                    }
+                    first_dot = Some(pos);
+                    seen_non_zero = true;
+                }
+                _ => {
+                    return Err(ParseDCNumberError::InvalidDigit);
+                }
+            }
+        }
+
+        // if we are not after a dot, we must consider the zero streak here
+        if let (Some(Range { start, end }), None) = (zero_streak, first_dot) {
+            digits.extend(iter::repeat(0).take(end - start));
+        }
+
+        let separator = first_dot
+            .map(|len| len - skipped_leading_zeros)
+            .unwrap_or(digits.len());
+        Ok(UnsignedDCNumber::new(digits, separator))
+    }
+
+    fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
+        UnsignedDCNumber::from_bytes_radix(s.as_ref(), radix)
+    }
+}
+
+impl<'a> FromStr for UnsignedDCNumber<'a> {
+    type Err = ParseDCNumberError;
+
+    fn from_str(s: &str) -> Result<Self, ParseDCNumberError> {
+        FromBytes::from_bytes(s.as_ref())
+    }
+}
+
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn test_default() {
@@ -772,7 +847,9 @@ mod tests {
             UnsignedDCNumber::from_str("0.32").expect("0.32")
         );
     }
-//
+
+    // write test for from_bytes with various bases
+
     bench_from_str![short_int: "3"];
     bench_from_str![mid_int: "17235428"];
     bench_from_str![long_int: "172354283422734622371431236441234351267438543781453193415694871634731457681354784531"];
