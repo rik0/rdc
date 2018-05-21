@@ -961,6 +961,10 @@ mod tests {
         test_binop![u8 t10dot1_2: 20.2 = 10.1 * 2];
         test_binop![u8 t0dot1_2: 0.2 = 0.1 * 2];
         test_binop![u8 t19_99: 1881 = 19 * 99];
+        test_binop![u8 t109_99: 10791 = 109 * 99];
+        test_binop![u8 t109dot0_99: 10791 = 109.0 * 99];
+        test_binop![u8 t10dot9_99: 1079.1 = 10.9 * 99];
+
     }
 
     #[test]
