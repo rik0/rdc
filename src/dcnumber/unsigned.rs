@@ -589,11 +589,10 @@ mod small_ints {
             253u8 => N253.clone(),
             254u8 => N254.clone(),
             255u8 => N255.clone(),
-            _ => panic!("too many bits for this u8")
+            _ => panic!("too many bits for this u8"),
         }
     }
 }
-
 
 impl<'a> UnsignedDCNumber<'a> {
     pub fn new<T>(digits: T, last_integer: usize) -> Self
@@ -601,7 +600,13 @@ impl<'a> UnsignedDCNumber<'a> {
             Cow<'a, [u8]>: From<T>,
     {
         let v: Cow<[u8]> = digits.into();
-        debug_assert!(last_integer <= v.len(), "separator {} should be less than {}: v{:?}", last_integer, v.len(), v);
+        debug_assert!(
+            last_integer <= v.len(),
+            "separator {} should be less than {}: v{:?}",
+            last_integer,
+            v.len(),
+            v
+        );
 
         UnsignedDCNumber {
             digits: v,
@@ -620,7 +625,6 @@ impl<'a> UnsignedDCNumber<'a> {
             separator: size,
         }
     }
-
 
     /// Creates UnsignecDCNumber from a byte representing a decimal ascii value
     ///
@@ -664,6 +668,7 @@ impl<'a> UnsignedDCNumber<'a> {
             _ => Err(ParseDCNumberError::InvalidDigit),
         }
     }
+
 
     #[allow(dead_code)]
     #[inline]
@@ -717,6 +722,60 @@ impl<'a> UnsignedDCNumber<'a> {
                 }
             }
         }
+    }
+}
+
+struct DCNumberAlignment<'a> {
+    leading_digits: &'a [u8],
+    aligned_part: &'a [u8],
+    second_aligned_part: &'a [u8],
+    fractional_tail: &'a [u8],
+}
+
+impl<'a> DCNumberAlignment<'a> {
+    fn align_ref(lhs: &'a UnsignedDCNumber, rhs: &'a UnsignedDCNumber) -> DCNumberAlignment<'a>
+    {
+        let leading_digits;
+        let right_aligned_part;
+        let fractional_tail;
+        let aligned_part;
+        let second_right_aligned_part: &[u8];
+        let second_aligned_part: &[u8];
+
+        if lhs.fractional_digits() > rhs.fractional_digits() {
+            let offset = lhs.fractional_digits() - rhs.fractional_digits();
+            let (front, tail) = lhs.digits.split_at(lhs.digits.len() - offset);
+            right_aligned_part = front;
+            fractional_tail = tail;
+            second_right_aligned_part = &rhs.digits;
+        } else {
+            let offset = rhs.fractional_digits() - lhs.fractional_digits();
+            let (front, tail) = rhs.digits.split_at(rhs.digits.len() - offset);
+            right_aligned_part = front;
+            fractional_tail = tail;
+            second_right_aligned_part = &lhs.digits;
+        }
+
+
+        if right_aligned_part.len() > second_right_aligned_part.len() {
+            let offset = right_aligned_part.len() - second_right_aligned_part.len();
+            let (front, tail) = right_aligned_part.split_at(offset);
+            aligned_part = tail;
+            leading_digits = front;
+            second_aligned_part = second_right_aligned_part;
+        } else {
+            let offset = second_right_aligned_part.len() - right_aligned_part.len();
+            let (front, tail) = second_right_aligned_part.split_at(offset);
+            aligned_part = tail;
+            leading_digits = front;
+            second_aligned_part = right_aligned_part;
+        }
+
+        DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail }
+    }
+
+    fn len(&self) -> usize {
+        self.fractional_tail.len() + self.aligned_part.len() + self.leading_digits.len()
     }
 }
 
@@ -875,83 +934,33 @@ impl<'a> Add for UnsignedDCNumber<'a> {
     fn add<'b>(self, other: UnsignedDCNumber<'b>) -> Self {
         // TODO since we consume self, we can possibly see if we can reuse the memory buffer
         // TODO optimization for 0 and powers of 10...
-        // implementing this "in place"
-        eprint!("XXXXXX {:?} + {:?} => ", self, other);
-        let self_separator = self.separator;
-        let other_separator = other.separator;
-        let sum_digits_len = max(self.fractional_digits(), other.fractional_digits())
-            + max(self.integer_magnitude(), other.integer_magnitude());
-        let mut sum_digits = VecDeque::with_capacity(sum_digits_len);
 
-        let self_fractional_len = self.fractional_digits();
-        let other_fractional_len = other.fractional_digits();
-        let fractional_tail: Vec<u8>;
+        let separator = max(self.separator, other.separator);
 
-        let mut self_digits = self.digits.into_owned();
-        let mut other_digits = other.digits.into_owned();
-
-        if self_fractional_len > other_fractional_len {
-            let offset = self_digits.len() - (self_fractional_len - other_fractional_len);
-            fractional_tail = self_digits.split_off(offset);
-        } else {
-            let offset = other_digits.len() - (other_fractional_len - self_fractional_len);
-            fractional_tail = other_digits.split_off(offset);
-        }
-
-        // TODO: we should make sure that numbers of different length are properly aligned
-
-        let mut self_digits = self_digits.iter().cloned();
-        let mut other_digits = other_digits.iter().cloned();
-
-        match self_separator.cmp(&other_separator) {
-            Ordering::Less => {
-                for _ in 0..(other_separator - self_separator) {
-                    sum_digits.push_back(other_digits.next().unwrap())
-                }
-            }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                for _ in 0..(self_separator - other_separator) {
-                    sum_digits.push_back(self_digits.next().unwrap())
-                }
-            }
-        }
-
+        let alignment = DCNumberAlignment::align_ref(&self, &other);
+        let total_len = alignment.len();
+        let DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail } = alignment;
 
         let mut carry = false;
-        for (mut lhs, rhs) in self_digits.rev().zip(other_digits.rev())
-            {
-            // as long as we represent internally as an array of u8, this is cheaper than the
-            // alternatives. there's no way to wrap around because lhs and rhs are both < 10.
-            // this is unfortunately not enforced. we should have a type for "vector of digits"
-            // similarly to how strings are implemented by checking the true nature of the digits.
-            let value = lhs + rhs + if carry {
-                carry = false;
-                1
-            } else {
-                0
-            };
-            if value >= 10 {
-                debug_assert!(value < 20);
-                carry = true;
-                sum_digits.push_front(value - 10);
-            } else {
-                sum_digits.push_front(value)
-            }
-        }
 
-        if carry {
-            sum_digits.push_front(1);
-        }
+        let digits: Vec<u8> = fractional_tail.iter().cloned().rev()
+            .chain(
+                aligned_part.iter().cloned().rev().zip(second_aligned_part.iter().cloned().rev()).map(
+                    |(lhs, rhs)| {
+                        let sum = if carry {
+                            carry = false;
+                            lhs + rhs + 1 // no risk of overflow, both < 10
+                        } else {
+                            lhs + rhs
+                        };
+                        let result = sum % 10;
+                        result
+                    })
+            ).chain(leading_digits.iter().cloned().rev()
+        ).rev().collect();
 
-        let separator: usize = max(
-            max(self_separator, other_separator) + if carry { 1 } else { 0 },
-            1,
-        );
+        UnsignedDCNumber::new(digits, 0)
 
-        sum_digits.extend(fractional_tail);
-        eprintln!("XXXXXX {:?} {}", sum_digits, separator);
-        UnsignedDCNumber::new(Vec::from(sum_digits), separator)
     }
 }
 
@@ -1313,6 +1322,118 @@ mod tests {
                 .expect("1234.320")
                 .split()
         );
+    }
+
+    #[test]
+    fn test_align1() {
+        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let m = UnsignedDCNumber::new([7, 8, 9, 2].as_ref(), 3); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([2, 3, 4, 5].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2].as_ref(), alignment.second_aligned_part);
+        assert_eq!([6].as_ref(), alignment.fractional_tail);
+    }
+
+
+    #[test]
+    fn test_align2() {
+        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 3); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2, 3].as_ref(), alignment.second_aligned_part);
+        assert_eq!([4, 5].as_ref(), alignment.fractional_tail);
+    }
+
+
+    #[test]
+    fn test_align3() {
+        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 4); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        let empty: &[u8] = &[];
+        assert_eq!(empty, alignment.leading_digits);
+        assert_eq!([1, 2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2, 3, 4].as_ref(), alignment.second_aligned_part);
+        assert_eq!([5].as_ref(), alignment.fractional_tail);
+    }
+
+    #[test]
+    fn test_align4() {
+        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4].as_ref(), 4); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        let empty: &[u8] = &[];
+        assert_eq!(empty, alignment.leading_digits);
+        assert_eq!([1, 2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2, 3, 4].as_ref(), alignment.second_aligned_part);
+        assert_eq!(empty, alignment.fractional_tail);
+    }
+
+    #[test]
+    fn test_align5() {
+        let m = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let n = UnsignedDCNumber::new([7, 8, 9, 2].as_ref(), 3); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([2, 3, 4, 5].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2].as_ref(), alignment.second_aligned_part);
+        assert_eq!([6].as_ref(), alignment.fractional_tail);
+    }
+
+
+    #[test]
+    fn test_align6() {
+        let m = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let n = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 3); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2, 3].as_ref(), alignment.second_aligned_part);
+        assert_eq!([4, 5].as_ref(), alignment.fractional_tail);
+    }
+
+
+    #[test]
+    fn test_align7() {
+        let m = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let n = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 4); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        let empty: &[u8] = &[];
+        assert_eq!(empty, alignment.leading_digits);
+        assert_eq!([1, 2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2, 3, 4].as_ref(), alignment.second_aligned_part);
+        assert_eq!([5].as_ref(), alignment.fractional_tail);
+    }
+
+    #[test]
+    fn test_align8() {
+        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
+        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4].as_ref(), 4); // 789.2
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        let empty: &[u8] = &[];
+        assert_eq!(empty, alignment.leading_digits);
+        assert_eq!([1, 2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
+        assert_eq!([7, 8, 9, 2, 3, 4].as_ref(), alignment.second_aligned_part);
+        assert_eq!(empty, alignment.fractional_tail);
     }
 
     macro_rules! test_eq {
@@ -1819,10 +1940,7 @@ mod tests {
             assert_eq!(i as u64, UnsignedDCNumber::from(i).to_u64().unwrap());
 
             let _ = write!(out, "{}", UnsignedDCNumber::from(i)).expect("write");
-            assert_eq!(
-                i.to_string(),
-                String::from_utf8(out).expect("utf8 issue"),
-            )
+            assert_eq!(i.to_string(), String::from_utf8(out).expect("utf8 issue"), )
         }
     }
 
