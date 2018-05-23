@@ -1,3 +1,5 @@
+use std::iter::Chain;
+
 #[derive(Debug)]
 pub struct CarryingMap<I, F, B>
 {
@@ -32,12 +34,68 @@ impl<I: Iterator, F> Iterator for CarryingMap<I, F, I::Item>
     }
 }
 
+impl <I: Iterator, F> CarryingMap<I, F, I::Item> {
+    pub fn chain_carrying<J: Iterator<Item=I::Item>, G>(self, other: CarryingMap<J, G, I::Item>) -> CarryingChain<I, J, F, G, I::Item> {
+        CarryingChain{head: self, last: other, state: CarryingChainState::Start}
+    }
+}
+
 pub fn carrying_map<I: IntoIterator, F>(iter: I, f: F, last_value: I::Item) -> CarryingMap<<I as IntoIterator>::IntoIter, F, I::Item>
     where
         F: Fn(bool, I::Item) -> (bool, I::Item)
 {
     let iterator = iter.into_iter();
     CarryingMap { iter: iterator, f, last_value, carry: false }
+}
+
+#[derive(Debug)]
+enum CarryingChainState {
+    Start,
+    Last,
+}
+
+#[derive(Debug)]
+struct CarryingChain<I: Iterator, J: Iterator, F, G, U> {
+    // TODO make it work with a sequence of chains maybe? for now we need just the one with two
+    // TODO consider creating a CarryingIterator trait instead
+    head: CarryingMap<I,F, U>,
+    last: CarryingMap<J, G, U>,
+    state: CarryingChainState,
+}
+
+
+impl<I:Iterator, J: Iterator<Item=I::Item>, F, G> Iterator for CarryingChain<I, J, G, F, I::Item>  where
+    F: Fn(bool, I::Item) -> (bool, I::Item),
+    G: Fn(bool, I::Item) -> (bool, I::Item),
+    I::Item: Clone,
+{
+    type Item = I::Item;
+
+
+    fn next(&mut self) -> Option<I::Item> {
+        use std::iter::Iterator;
+        // TODO possibly we want to get some because we need to detect that the first iterator is going
+        // to release the carry (or find another way... maybe only if carry is active? if not,
+        // it does not matter)
+        match self.state {
+            CarryingChainState::Start => {
+                match self.head.next() {
+                    None => {
+                        let carry = self.head.carry;
+                        self.last.carry = carry;
+                        self.state = CarryingChainState::Last;
+                        self.last.next()
+                    }
+                    Some(v) => {
+                        Some(v)
+                    }
+                }
+            }
+            CarryingChainState::Last => {
+                self.last.next()
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -65,6 +123,18 @@ mod test {
         v.push(1);
 
         assert_eq!(v, x);
+    }
+
+    #[test]
+    fn chain_carry() {
+        let mut v = vec![2u32];
+        let mut u = vec![3u32];
+        let ch1 = carrying_map(v.clone().into_iter(), |carry, x| (true, x), 1u32);
+        let ch2 = carrying_map(u.clone().into_iter(), |carry, x| (true, x), 4u32);
+        let chain = ch1.chain_carrying(ch2);
+        let actual: Vec<u32> = chain.collect();
+
+        assert_eq!(vec![2u32, 3u32, 4u32], actual);
     }
 }
 
