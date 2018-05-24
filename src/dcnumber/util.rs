@@ -34,9 +34,59 @@ impl<I: Iterator, F> Iterator for CarryingMap<I, F, I::Item>
     }
 }
 
-impl <I: Iterator, F> CarryingMap<I, F, I::Item> {
+struct AsPairs<T> {
+    it: T
+}
+
+impl<T> AsRef<T> for AsPairs<T> {
+    fn as_ref(&self) -> &T {
+        return &self.it;
+    }
+}
+
+impl<T> AsMut<T> for AsPairs<T> {
+    fn as_mut(&mut self) -> &mut T {
+        return &mut self.it;
+    }
+}
+
+impl<T> From<T> for AsPairs<T> {
+    fn from(it: T) -> Self {
+        AsPairs { it }
+    }
+}
+
+impl<I: Iterator, F> Iterator for AsPairs<CarryingMap<I, F, I::Item>> where
+    F: Fn(bool, I::Item) -> (bool, I::Item),
+    I::Item: Clone,
+{
+    type Item = (bool, I::Item);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (carry, value) = self.it.next_carrying();
+        value
+            .map(|item| (carry, item))
+    }
+}
+
+impl<I: Iterator, F> CarryingMap<I, F, I::Item> where
+    F: Fn(bool, I::Item) -> (bool, I::Item),
+    I::Item: Clone,
+{
     pub fn chain_carrying<J: Iterator<Item=I::Item>, G>(self, other: CarryingMap<J, G, I::Item>) -> CarryingChain<I, J, F, G, I::Item> {
         CarryingChain{head: self, last: other, state: CarryingChainState::Start}
+    }
+
+    pub fn next_carrying(&mut self) -> (bool, Option<I::Item>) {
+        match self.iter.next().map(|x| (self.f)(self.carry, x)) {
+            None => {
+                (self.carry, None)
+            }
+            Some((new_carry, value)) => {
+                self.carry = new_carry;
+                (new_carry, Some(value))
+            }
+        }
     }
 }
 
@@ -77,16 +127,21 @@ impl<I:Iterator, J: Iterator<Item=I::Item>, F, G> Iterator for CarryingChain<I, 
         // TODO possibly we want to get some because we need to detect that the first iterator is going
         // to release the carry (or find another way... maybe only if carry is active? if not,
         // it does not matter)
+
+        // 1. get an item with carry and put it somewhere, even locally
+        // 2. if there is carry, we know it can be the digit carried over
+        // 3. get the item after this one: if it is None, it means that this item
+        //
+
         match self.state {
             CarryingChainState::Start => {
-                match self.head.next() {
-                    None => {
-                        let carry = self.head.carry;
+                match self.head.next_carrying() {
+                    (carry, None) => {
                         self.last.carry = carry;
                         self.state = CarryingChainState::Last;
                         self.last.next()
                     }
-                    Some(v) => {
+                    (_, Some(v)) => {
                         Some(v)
                     }
                 }
@@ -126,10 +181,58 @@ mod test {
     }
 
     #[test]
-    fn chain_carry() {
+    fn chain_carry_carry_across() {
         let mut v = vec![2u32];
         let mut u = vec![3u32];
         let ch1 = carrying_map(v.clone().into_iter(), |carry, x| (true, x), 1u32);
+        let ch2 = carrying_map(u.clone().into_iter(), |carry, x| (true, x), 4u32);
+        let chain = ch1.chain_carrying(ch2);
+        let actual: Vec<u32> = chain.collect();
+
+        assert_eq!(vec![2u32, 3u32, 4u32], actual);
+    }
+
+    #[test]
+    fn chain_carry_carry_across_and_suppress() {
+        let mut v = vec![2u32];
+        let mut u = vec![3u32];
+        let ch1 = carrying_map(v.clone().into_iter(), |carry, x| (true, x), 1u32);
+        let ch2 = carrying_map(u.clone().into_iter(), |carry, x| (false, x), 4u32);
+        let chain = ch1.chain_carrying(ch2);
+        let actual: Vec<u32> = chain.collect();
+
+        assert_eq!(vec![2u32, 3u32], actual);
+    }
+
+    #[test]
+    fn chain_carry_no_carry() {
+        let mut v = vec![2u32];
+        let mut u = vec![3u32];
+        let ch1 = carrying_map(v.clone().into_iter(), |carry, x| (false, x), 1u32);
+        let ch2 = carrying_map(u.clone().into_iter(), |carry, x| (carry, x), 4u32);
+        let chain = ch1.chain_carrying(ch2);
+        let actual: Vec<u32> = chain.collect();
+
+        assert_eq!(vec![2u32, 3u32], actual);
+    }
+
+    #[test]
+    fn chain_carry_carry() {
+        let mut v = vec![2u32];
+        let mut u = vec![3u32];
+        let ch1 = carrying_map(v.clone().into_iter(), |carry, x| (true, x), 1u32);
+        let ch2 = carrying_map(u.clone().into_iter(), |carry, x| (carry, x), 4u32);
+        let chain = ch1.chain_carrying(ch2);
+        let actual: Vec<u32> = chain.collect();
+
+        assert_eq!(vec![2u32, 3u32, 4u32], actual);
+    }
+
+    #[test]
+    fn chain_carry_carry_across2() {
+        let mut v = vec![2u32];
+        let mut u = vec![3u32];
+        let ch1 = carrying_map(v.clone().into_iter(), |carry, x| (false, x), 1u32);
         let ch2 = carrying_map(u.clone().into_iter(), |carry, x| (true, x), 4u32);
         let chain = ch1.chain_carrying(ch2);
         let actual: Vec<u32> = chain.collect();
