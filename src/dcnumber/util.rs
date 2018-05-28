@@ -13,7 +13,7 @@ pub trait CarryingIterator {
             Self: Sized,
             F: Fn(bool, Self::Item) -> (bool, B) {
         let carry = self.has_carry();
-        CarryingMap { iter: self, f, carry }
+        CarryingMap { iter: self, f}
     }
 
 //    #[inline]
@@ -136,7 +136,6 @@ pub struct CarryingMap<I, F>
 {
     iter: I,
     f: F,
-    carry: bool,
 }
 
 // TODO: what to do about the "last value"? I think this should be part of the "to normal iterator"
@@ -173,12 +172,12 @@ impl <B, CI:CarryingIterator, F> CarryingIterator for CarryingMap<CI, F>  where
 
     #[inline]
     fn has_carry(&self) -> bool {
-        self.carry
+        self.iter.has_carry()
     }
 
     #[inline]
     fn set_carry(&mut self, carry: bool) {
-        self.carry = carry
+        self.iter.set_carry(carry)
     }
 
     #[inline]
