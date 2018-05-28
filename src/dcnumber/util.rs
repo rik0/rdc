@@ -20,7 +20,7 @@ pub trait CarryingIterator {
 //    fn carrying_chain<U>(self, other: U) -> CarryingChain<Self, U::IntoIter> where
 //        Self: Sized, U: IntoIterator<Item=Self::Item>,
 //    {
-//        CarryingIterator::chain(self, carrying(other))
+//        CarryingIterator::carrying_chain2(self, carrying(other))
 //    }
 
     #[inline]
@@ -60,6 +60,16 @@ impl <I: IntoIterator> From<I> for CarryingIter<I::IntoIter> {
         carrying(iter)
     }
 }
+
+//
+//impl <I: IntoIterator> From<I> for CarryingIterator<Item=I::Item> where
+//    Self: Sized
+//{
+//    #[inline]
+//    fn from(iter: I) -> Self {
+//        carrying(iter)
+//    }
+//}
 
 //impl <I: Iterator> Iterator for CarryingIter<I> {
 //    type Item = I::Item;
@@ -237,7 +247,18 @@ impl <A, B> CarryingIterator for CarryingChain<A, B> where
     #[inline]
     fn carrying_next(&mut self) -> (bool, Option<<Self as CarryingIterator>::Item>) {
         match self.state {
-            CarryingChainState::Start => self.head.carrying_next(),
+            CarryingChainState::Start => {
+                match self.head.carrying_next() {
+                    (carry, None) => {
+                        self.last.set_carry(carry);
+                        self.state = CarryingChainState::Last;
+                        self.last.carrying_next()
+                    }
+                    (carry, Some(v)) => {
+                        (carry, Some(v))
+                    }
+                }
+            },
             CarryingChainState::Last => self.last.carrying_next(),
         }
     }
@@ -303,18 +324,18 @@ mod test {
         assert_eq!(v, x);
     }
 
-//    #[test]
-//    fn chain_carry_carry_false() {
-//        let mut v = vec![2u32];
-//        let mut u = vec![3u32];
-//
-//        let actual: Vec<u32> = carrying(v.clone().into_iter())
-//            .carrying_chain(u.clone().into_iter())
-//            .to_iter(4u32)
-//            .collect();
-//
-//        assert_eq!(vec![2u32, 3u32], actual);
-//    }
+    #[test]
+    fn chain_carry_carry_false() {
+        let mut v = vec![2u32];
+        let mut u = vec![3u32];
+
+        let actual: Vec<u32> = carrying(v.into_iter())
+            .carrying_chain(carrying(u.into_iter()))
+            .to_iter(4u32)
+            .collect();
+
+        assert_eq!(vec![2u32, 3u32], actual);
+    }
 
 //    #[test]
 //    fn chain_carry_carry_across_and_suppress() {
