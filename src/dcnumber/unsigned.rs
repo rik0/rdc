@@ -945,18 +945,18 @@ impl<'a> Add for UnsignedDCNumber<'a> {
         let DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail } = alignment;
 
         let common_it = aligned_part.iter().cloned().rev().zip(second_aligned_part.iter().cloned().rev());
-        let carrying = carrying(common_it).carrying_map(1u8, |carry, (lhs, rhs)| {
-            let sum = if carry {
-                lhs + rhs + 1 // no risk of overflow, both < 10
-            } else {
-                lhs + rhs
-            };
-            let result = sum % 10;
-            (sum >= 10, result)
-        }).carrying_chain( carrying(leading_digits.iter().cloned().rev()).carrying_map(1u8, |carry, value| {
-            let value = value + if carry {1u8} else {0u8};
-            (value >= 10, value % 10)
-        }));
+//        let carrying = carrying(common_it).carrying_map(1u8, |carry, (lhs, rhs)| {
+//            let sum = if carry {
+//                lhs + rhs + 1 // no risk of overflow, both < 10
+//            } else {
+//                lhs + rhs
+//            };
+//            let result = sum % 10;
+//            (sum >= 10, result)
+//        }).carrying_chain( carrying(leading_digits.iter().cloned().rev()).carrying_map(1u8, |carry, value| {
+//            let value = value + if carry {1u8} else {0u8};
+//            (value >= 10, value % 10)
+//        }));
 
 
 //        let digits: Vec<u8> = fractional_tail.iter().cloned().rev()
