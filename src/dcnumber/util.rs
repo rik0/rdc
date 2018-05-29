@@ -8,6 +8,14 @@ pub trait CarryingIterator {
     fn carrying_next(&mut self) -> (bool, Option<Self::Item>);
 
     #[inline]
+    fn with_carry(mut self, carry: bool) -> Self where
+        Self: Sized
+    {
+        self.set_carry(carry);
+        self
+    }
+
+    #[inline]
     fn carrying_map<B, F>(self, f: F) -> CarryingMap<Self, F>
         where
             Self: Sized,
@@ -16,12 +24,6 @@ pub trait CarryingIterator {
         CarryingMap { iter: self, f}
     }
 
-//    #[inline]
-//    fn carrying_chain<U>(self, other: U) -> CarryingChain<Self, U::IntoIter> where
-//        Self: Sized, U: IntoIterator<Item=Self::Item>,
-//    {
-//        CarryingIterator::carrying_chain2(self, carrying(other))
-//    }
 
     #[inline]
     fn carrying_chain<CI>(self, other: CI) -> CarryingChain<Self, CI> where
@@ -41,6 +43,7 @@ pub trait CarryingIterator {
     }
 
 }
+
 
 #[derive(Debug)]
 pub struct CarryingIter<I> {
@@ -102,19 +105,6 @@ impl <CI: CarryingIterator> Iterator for IteratorAdapter<CI, CI::Item> where
         }
     }
 }
-//
-//impl <CI: CarryingIterator> IntoIterator for IteratorAdapter<CI, CI::Item> where
-//    CI: Sized,
-//    CI::Item: Clone
-//{
-//    type Item = CI::Item;
-//    type IntoIter = Self;
-//
-//    fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
-//        unimplemented!()
-//    }
-//}
-
 
 #[derive(Debug)]
 pub struct CarryingMap<I, F>
@@ -160,8 +150,6 @@ enum CarryingChainState {
 
 #[derive(Debug)]
 pub struct CarryingChain<A, B> {
-    // TODO make it work with a sequence of chains maybe? for now we need just the one with two
-    // TODO consider creating a CarryingIterator trait instead
     head: A,
     last: B,
     state: CarryingChainState,
@@ -268,6 +256,53 @@ mod test {
             .collect();
 
         assert_eq!(vec![2u32, 3u32, 4u32], actual);
+    }
+
+    #[test]
+    fn chain_carry_3_no_carry() {
+        assert_eq!(
+            vec![2u32, 3u32, 4u32],
+            carrying(vec![2u32])
+                .carrying_chain(carrying(vec![3u32]))
+                .carrying_chain(carrying(vec![4u32]))
+                .to_iter(5u32)
+                .collect::< Vec::<u32> > ());
+    }
+
+    #[test]
+    fn chain_carry_3_carry_1() {
+        assert_eq!(
+            vec![2u32, 3u32, 4u32, 5u32],
+            carrying(vec![2u32])
+                .with_carry(true)
+                .carrying_chain(carrying(vec![3u32]))
+                .carrying_chain(carrying(vec![4u32]))
+                .to_iter(5u32)
+                .collect::< Vec::<u32> > ());
+    }
+
+    #[test]
+    fn chain_carry_3_carry_2() {
+        assert_eq!(
+            vec![2u32, 3u32, 4u32, 5u32],
+            carrying(vec![2u32])
+                .carrying_chain(carrying(vec![3u32]))
+                .with_carry(true)
+                .carrying_chain(carrying(vec![4u32]))
+                .to_iter(5u32)
+                .collect::< Vec::<u32> > ());
+    }
+
+    #[test]
+    fn chain_carry_3_carry_3() {
+        assert_eq!(
+            vec![2u32, 3u32, 4u32, 5u32],
+            carrying(vec![2u32])
+                .carrying_chain(carrying(vec![3u32]))
+                .carrying_chain(carrying(vec![4u32]))
+                .with_carry(true)
+                .to_iter(5u32)
+                .collect::< Vec::<u32> > ());
     }
 }
 
