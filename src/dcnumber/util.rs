@@ -20,7 +20,6 @@ pub trait CarryingIterator {
         where
             Self: Sized,
             F: Fn(bool, Self::Item) -> (bool, B) {
-        let carry = self.has_carry();
         CarryingMap { iter: self, f}
     }
 
@@ -77,7 +76,7 @@ impl <I: Iterator> CarryingIterator for CarryingIter<I> {
     }
 }
 
-struct IteratorAdapter<CI, U> {
+pub struct IteratorAdapter<CI, U> {
     iter: CI,
     last_item: U,
 }
@@ -105,6 +104,7 @@ impl <CI: CarryingIterator> Iterator for IteratorAdapter<CI, CI::Item> where
         }
     }
 }
+
 
 #[derive(Debug)]
 pub struct CarryingMap<I, F>
@@ -206,6 +206,25 @@ mod test {
     use std::iter::Iterator;
 
     #[test]
+    fn rev() {
+        let v = vec![2u8, 3u8];
+        let mut vr = v.clone();
+        vr.reverse();
+        let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
+            .to_iter(0u8).collect();
+        assert_eq!(vr, actual)
+    }
+
+//    #[test]
+//    fn rev2() {
+//        let v = vec![2u8, 3u8];
+//        let v2 = v.clone();
+//        let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
+//            .to_iter(0u8).rev().collect();
+//        assert_eq!( v2, actual )
+//    }
+
+    #[test]
     fn no_carry() {
         use std::iter::Iterator;
         let v = vec![1u32];
@@ -266,7 +285,7 @@ mod test {
                 .carrying_chain(carrying(vec![3u32]))
                 .carrying_chain(carrying(vec![4u32]))
                 .to_iter(5u32)
-                .collect::< Vec::<u32> > ());
+                .collect::<Vec<u32>>());
     }
 
     #[test]
@@ -278,7 +297,7 @@ mod test {
                 .carrying_chain(carrying(vec![3u32]))
                 .carrying_chain(carrying(vec![4u32]))
                 .to_iter(5u32)
-                .collect::< Vec::<u32> > ());
+                .collect::<Vec<u32>>());
     }
 
     #[test]
@@ -290,7 +309,7 @@ mod test {
                 .with_carry(true)
                 .carrying_chain(carrying(vec![4u32]))
                 .to_iter(5u32)
-                .collect::< Vec::<u32> > ());
+                .collect::<Vec<u32>>());
     }
 
     #[test]
@@ -302,7 +321,7 @@ mod test {
                 .carrying_chain(carrying(vec![4u32]))
                 .with_carry(true)
                 .to_iter(5u32)
-                .collect::< Vec::<u32> > ());
+                .collect::<Vec<u32>>());
     }
 }
 
