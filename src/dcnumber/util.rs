@@ -1,4 +1,5 @@
-
+use std::fmt::Debug;
+use std::iter::Rev;
 
 pub trait CarryingIterator {
     type Item;
@@ -43,8 +44,26 @@ pub trait CarryingIterator {
 
 }
 
+pub trait DoubleEndedCarryingIterator: CarryingIterator {
+    fn carrying_next_back(&mut self) -> (bool, Option<Self::Item>);
 
-#[derive(Debug)]
+    fn has_back_carry(&self) -> bool {
+       self.has_carry()
+    }
+
+    fn set_back_carry(&mut self, carry: bool) {
+        self.set_carry(carry)
+    }
+
+    fn with_back_carry(self, carry:bool) -> Self where
+        Self: Sized
+    {
+        self.with_carry(carry)
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub struct CarryingIter<I> {
     iter: I,
     carry: bool,
@@ -76,6 +95,22 @@ impl <I: Iterator> CarryingIterator for CarryingIter<I> {
     }
 }
 
+impl <I: DoubleEndedIterator> DoubleEndedCarryingIterator for CarryingIter<I>
+    where I::Item: Debug
+{
+    fn carrying_next_back(&mut self) -> (bool, Option<Self::Item>) {
+        // TODO we might want to have a back-carry
+        let carry = self.carry;
+        let x = self.iter.next_back();
+        match &x {
+            &None => eprintln!("carrying_next_back, None"),
+            &Some(ref a) => eprintln!("carrying_next_back, Some({:?})", a),
+        };
+        (carry, x)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct IteratorAdapter<CI, U> {
     iter: CI,
     last_item: U,
@@ -97,7 +132,7 @@ impl <CI: CarryingIterator> Iterator for IteratorAdapter<CI, CI::Item> where
                     None
                 }
             }
-            (carry, Some(v)) => {
+            (_carry, Some(v)) => {
                 // TODO are we sure we do not need to handle the carry also here?
                 Some(v)
             }
@@ -105,8 +140,28 @@ impl <CI: CarryingIterator> Iterator for IteratorAdapter<CI, CI::Item> where
     }
 }
 
+impl <DECI: DoubleEndedCarryingIterator> DoubleEndedIterator for IteratorAdapter<DECI, DECI::Item> where
+    DECI::Item: Clone + Debug,
+{
+    fn next_back(&mut self) -> Option<<Self as Iterator>::Item> {
+        let x = match self.iter.carrying_next_back() {
+            (true, None) => {
+                    eprintln!("Injecting last_item: {:?}", self.last_item);
+                    self.iter.set_back_carry(false);
+                    Some(self.last_item.clone())
+                }
+            (false, None) => None,
+            (_carry, Some(v)) => Some(v)
+        };
+        eprintln!("DoubleEndedIterator next_back {:?}", x);
 
-#[derive(Debug)]
+        x
+    }
+}
+
+
+
+#[derive(Debug, Clone)]
 pub struct CarryingMap<I, F>
 {
     iter: I,
@@ -142,7 +197,7 @@ impl <B, CI:CarryingIterator, F> CarryingIterator for CarryingMap<CI, F>  where
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum CarryingChainState {
     Start,
     Last,
@@ -208,21 +263,52 @@ mod test {
     #[test]
     fn rev() {
         let v = vec![2u8, 3u8];
-        let mut vr = v.clone();
-        vr.reverse();
+        let mut expected = vec![3u8, 2u8];
+
         let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
             .to_iter(0u8).collect();
-        assert_eq!(vr, actual)
+        assert_eq!(expected, actual)
     }
 
-//    #[test]
-//    fn rev2() {
-//        let v = vec![2u8, 3u8];
-//        let v2 = v.clone();
-//        let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
-//            .to_iter(0u8).rev().collect();
-//        assert_eq!( v2, actual )
-//    }
+    #[test]
+    fn rev_carry() {
+        let v = vec![2u8, 3u8];
+        let mut expected = vec![3u8, 2u8, 1u8];
+
+        let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
+            .with_carry(true)
+            .to_iter(1u8).collect();
+        assert_eq!(expected, actual)
+    }
+
+    #[test]
+    fn rev2() {
+        let v = vec![2u8, 3u8];
+        let expected = v.clone();
+        let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
+            .to_iter(0u8).rev().collect();
+        assert_eq!( expected, actual )
+    }
+
+    #[ignore]
+    #[test]
+    fn rev2_carry() {
+        let v = vec![2u8, 3u8];
+        let expected = vec![1u8, 2u8, 3u8];
+        let base = carrying(v.into_iter().rev().inspect(
+            |x| eprintln!("inspect {:?}", x)
+        ))
+            .with_back_carry(true)
+            .to_iter(1u8);
+
+        let mut manual_rev: Vec<u8> = base.clone().collect();
+        manual_rev.reverse();
+        assert_eq!(expected, manual_rev);
+
+        eprintln!("base.rev().collect()");
+        let actual: Vec<u8> = base.rev().collect();
+        assert_eq!( expected, actual )
+    }
 
     #[test]
     fn no_carry() {

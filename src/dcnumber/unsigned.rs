@@ -938,30 +938,33 @@ impl<'a> Add for UnsignedDCNumber<'a> {
     fn add<'b>(self, other: UnsignedDCNumber<'b>) -> Self {
         // TODO since we consume self, we can possibly see if we can reuse the memory buffer
         // TODO optimization for 0 and powers of 10...
-//
-//        let separator = max(self.separator, other.separator);
-//        let alignment = DCNumberAlignment::align_ref(&self, &other);
-//        let total_len = alignment.len();
-//        let DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail } = alignment;
 
-//        let digits: Vec<u8> = fractional_tail.iter().cloned().rev()
-//            .chain(
-//                carrying(
-//                    aligned_part.iter().cloned().rev().zip(second_aligned_part.iter().cloned().rev())
-//                ).carrying_map(|carry, (lhs, rhs)| {
-//                    let sum = if carry {
-//                        lhs + rhs + 1 // no risk of overflow, both < 10
-//                    } else {
-//                        lhs + rhs
-//                    };
-//                    let result = sum % 10;
-//                    (sum >= 10, result)
-//                }).carrying_chain(carrying(leading_digits.iter().cloned().rev())).to_iter(1u8)
-//            ).rev().collect();
-//
-//
-//        UnsignedDCNumber::new(digits, 0)
-        unimplemented!();
+        let separator = max(self.separator, other.separator);
+        let alignment = DCNumberAlignment::align_ref(&self, &other);
+        let total_len = alignment.len();
+        let DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail } = alignment;
+
+        let mut digits: Vec<u8> = fractional_tail.iter().cloned().rev()
+            .chain(
+                carrying(
+                    aligned_part.iter().cloned().rev().zip(second_aligned_part.iter().cloned().rev())
+                ).carrying_map(|carry, (lhs, rhs)| {
+                    let sum = if carry {
+                        lhs + rhs + 1 // no risk of overflow, both < 10
+                    } else {
+                        lhs + rhs
+                    };
+                    let result = sum % 10;
+                    (sum >= 10, result)
+                }).carrying_chain(carrying(leading_digits.iter().cloned().rev())).to_iter(1u8)
+            ).collect();
+
+        // TODO: it is probably more efficient to ditch the iterators and push only if there
+        // is carry.
+
+        digits.reverse();
+
+        UnsignedDCNumber::new(digits, separator)
     }
 }
 
@@ -1664,9 +1667,9 @@ mod tests {
         };
     }
 
-//    test_binop![test_add_zero: 0 = 0 + 0];
-//    test_binop![test_add_unit: 1 = 1 + 0];
-//    test_binop![test_add_unit2: 1 = 0 + 1];
+    test_binop![test_add_zero: 0 = 0 + 0];
+    test_binop![test_add_unit: 1 = 1 + 0];
+    test_binop![test_add_unit2: 1 = 0 + 1];
 //    test_binop![test_integers: 1026 = 520 + 506];
 //    test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
 //    test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
@@ -1688,7 +1691,6 @@ mod tests {
         test_binop![u8 t109_99: 10791 = 109 * 99];
         test_binop![u8 t109dot0_99: 10791 = 109.0 * 99];
         test_binop![u8 t10dot9_99: 1079.1 = 10.9 * 99];
-
     }
 
     #[test]
