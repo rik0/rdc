@@ -939,28 +939,53 @@ impl<'a> Add for UnsignedDCNumber<'a> {
         // TODO since we consume self, we can possibly see if we can reuse the memory buffer
         // TODO optimization for 0 and powers of 10...
 
-        let separator = max(self.separator, other.separator);
+        let mut separator = max(self.separator, other.separator);
         let alignment = DCNumberAlignment::align_ref(&self, &other);
         let total_len = alignment.len();
         let DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail } = alignment;
 
-        let mut digits: Vec<u8> = fractional_tail.iter().cloned().rev()
-            .chain(
-                carrying(
-                    aligned_part.iter().cloned().rev().zip(second_aligned_part.iter().cloned().rev())
-                ).carrying_map(|carry, (lhs, rhs)| {
-                    let sum = if carry {
-                        lhs + rhs + 1 // no risk of overflow, both < 10
-                    } else {
-                        lhs + rhs
-                    };
-                    let result = sum % 10;
-                    (sum >= 10, result)
-                }).carrying_chain(carrying(leading_digits.iter().cloned().rev())).to_iter(1u8)
-            ).collect();
+        let mut carry = false;
+        let mut digits: Vec<u8> = Vec::new();
 
-        // TODO: it is probably more efficient to ditch the iterators and push only if there
-        // is carry.
+
+        digits.extend(fractional_tail.iter().rev());
+        for (lhs, rhs) in aligned_part.iter().rev().cloned().zip(second_aligned_part.iter().rev().cloned()) {
+            debug_assert!(lhs < 10);
+            debug_assert!(rhs < 10);
+            let sum = if carry {
+                carry = false;
+                lhs + rhs + 1 // no risk of overflow, both < 10
+            } else {
+                lhs + rhs
+            };
+            let mut result = sum;
+            if sum >= 10 {
+                carry = true;
+                result -= 10;
+            }
+            digits.push(result);
+        }
+
+        for &digit in leading_digits.iter().rev() {
+            debug_assert!(digit < 10);
+            let value = if carry {
+                digit + 1
+            } else {
+                digit
+            };
+
+            let mut result = value;
+            if result >= 10 {
+                carry = true;
+                result -= 10;
+            }
+            digits.push(result);
+        }
+
+        if carry {
+            separator += 1;
+            digits.push(1);
+        }
 
         digits.reverse();
 
@@ -1441,6 +1466,20 @@ mod tests {
         assert_eq!(empty, alignment.fractional_tail);
     }
 
+    #[test]
+    fn test_align9() {
+        let n = UnsignedDCNumber::new([5, 2, 0].as_ref(), 3);
+        let m = UnsignedDCNumber::new([5, 2, 6].as_ref(), 3);
+
+        let alignment = DCNumberAlignment::align_ref(&n, &m);
+
+        let empty: &[u8] = &[];
+        assert_eq!(empty, alignment.leading_digits);
+        assert_eq!([5, 2, 0].as_ref(), alignment.aligned_part);
+        assert_eq!([5, 2, 6].as_ref(), alignment.second_aligned_part);
+        assert_eq!(empty, alignment.fractional_tail);
+    }
+
     macro_rules! test_eq {
         ($test_name:ident : $expected_digits:tt = $digits:tt) => {
             mod $test_name {
@@ -1670,9 +1709,9 @@ mod tests {
     test_binop![test_add_zero: 0 = 0 + 0];
     test_binop![test_add_unit: 1 = 1 + 0];
     test_binop![test_add_unit2: 1 = 0 + 1];
-//    test_binop![test_integers: 1026 = 520 + 506];
-//    test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
-//    test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
+    test_binop![test_integers: 1026 = 520 + 506];
+    test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
+    test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
 
     mod mul {
         use super::*;
