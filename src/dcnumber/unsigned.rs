@@ -1802,4 +1802,53 @@ mod tests {
     bench_from_str![mid_int: "17235428"];
     bench_from_str![long_int: "172354283422734622371431236441234351267438543781453193415694871634731457681354784531"];
     bench_from_str![longer_int: "17235428342273462237143123644123435126743854378145319341569487000000000000163473145768135478453123187356412946123041213310238698752341280000000000000000000000"];
+
+    macro_rules! from_primitive_int {
+            ($test_name:ident : $digits:tt, $tp:tt) => {
+
+                #[test]
+                fn $test_name() {
+                    assert_eq!(UnsignedDCNumber::from_str(stringify!($digits)).unwrap(), UnsignedDCNumber::from($digits as $tp));
+                }
+            }
+    }
+
+    from_primitive_int!(test_0_u8: 0, u8);
+    from_primitive_int!(test_1_u8: 1, u8);
+    from_primitive_int!(test_2_u8: 2, u8);
+    from_primitive_int!(test_10_u8: 10, u8);
+    from_primitive_int!(test_12u8: 12, u8);
+    from_primitive_int!(test_123u8: 123, u8);
+    from_primitive_int!(test_223u8: 223, u8);
+    from_primitive_int!(test_255u8: 255, u8);
+    
+    from_primitive_int!(test_0_u16: 0, u16);
+    from_primitive_int!(test_1_u16: 1, u16);
+    from_primitive_int!(test_2_u16: 2, u16);
+    from_primitive_int!(test_10_u16: 10, u16);
+    from_primitive_int!(test_12u16: 12, u16);
+    from_primitive_int!(test_123u16: 123, u16);
+    from_primitive_int!(test_223u16: 223, u16);
+    from_primitive_int!(test_255u16: 255, u16);
+    from_primitive_int!(test_256u32: 256, u32);
+    from_primitive_int!(test_10256u32: 10256, u32);
+
+    from_primitive_int!(test_0_u32: 0, u32);
+    from_primitive_int!(test_1_u32: 1, u32);
+    from_primitive_int!(test_2_u32: 2, u32);
+    from_primitive_int!(test_10_u32: 10, u32);
+    from_primitive_int!(test_12u32: 12, u32);
+    from_primitive_int!(test_123u32: 123, u32);
+    from_primitive_int!(test_223u32: 223, u32);
+    from_primitive_int!(test_255u32: 255, u32);
+
+    from_primitive_int!(test_0_u64: 0, u64);
+    from_primitive_int!(test_1_u64: 1, u64);
+    from_primitive_int!(test_2_u64: 2, u64);
+    from_primitive_int!(test_10_u64: 10, u64);
+    from_primitive_int!(test_12u64: 12, u64);
+    from_primitive_int!(test_123u64: 123, u64);
+    from_primitive_int!(test_223u64: 223, u64);
+    from_primitive_int!(test_255u64: 255, u64);
+
 }
