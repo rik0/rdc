@@ -1117,11 +1117,24 @@ mod tests {
     #[test]
     fn test_split() {
         assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
+
+    }
+
+    #[test]
+    fn test_split1() {
         assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
+    }
+
+    #[test]
+    fn test_split2() {
         assert_eq!(
             ([1, 2, 3, 4].as_ref(), [3, 2].as_ref()),
             udcn!("1234.32").split()
         );
+    }
+
+    #[test]
+    fn test_split3() {
         assert_eq!(
             ([1, 2, 3, 4].as_ref(), [3, 2].as_ref()),
             UnsignedDCNumber::from_str("1234.320")
