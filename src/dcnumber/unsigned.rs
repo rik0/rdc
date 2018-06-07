@@ -636,10 +636,10 @@ macro_rules! lsd {
 
 // TODO consiider implementing *= u8; migght be the fastest option here (MulAssign)
 
-impl<'a> Add for UnsignedDCNumber<'a> {
+impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
     type Output = UnsignedDCNumber<'a>;
 
-    fn add<'b>(self, other: UnsignedDCNumber<'b>) -> Self {
+    fn add<'b>(self, other: UnsignedDCNumber<'a>) -> Self {
         // TODO since we consume self, we can possibly see if we can reuse the memory buffer
         // TODO optimization for 0 and powers of 10...
 
