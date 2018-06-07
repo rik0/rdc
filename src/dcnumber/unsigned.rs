@@ -633,66 +633,6 @@ macro_rules! lsd {
     };
 }
 
-impl<'a> Mul<u8> for UnsignedDCNumber<'a> {
-    type Output = UnsignedDCNumber<'a>;
-
-    fn mul(self, other: u8) -> Self::Output {
-        // optimize 0, 1, 10, 100
-
-        let mut separator = self.separator;
-        let mut digits = VecDeque::from(self.digits.into_owned());
-
-        let mut index = 0;
-        loop {
-            if index >= digits.len() {
-                break;
-            }
-
-            if digits[index] == 0 {
-                index += 1;
-                continue;
-            }
-
-            // we are really multiplying two u8 so w need an u16 for the result without error
-            let mut result = digits[index] as u16 * other as u16;
-            {
-                // this handles the current digit, we need to overwrite what was there
-                digits[index] = lsd!(result);
-                result /= 10;
-
-                for index in (index.saturating_sub(3)..index).rev() {
-                    digits[index] += lsd![result];
-                    result /= 10;
-
-                    // here we handle the carry
-                    if digits[index] >= 10 {
-                        debug_assert!(digits[index] < 20);
-                        result += 1;
-                        digits[index] -= 10;
-                    }
-                }
-            }
-
-            // if we had "overflow" for this digit, we should create the right
-            while result > 0 {
-                digits.push_front(lsd![result]);
-                separator += 1;
-                index += 1;
-                result /= 10;
-            }
-            index += 1;
-        }
-
-        digits
-            .iter()
-            .enumerate()
-            .rposition(|(i, &ch)| ch != 0 && i >= separator)
-            .map(|last_non_zero| digits.truncate(last_non_zero + 1))
-            .unwrap_or_else(|| digits.truncate(separator));
-
-        UnsignedDCNumber::new(Vec::from(digits), separator)
-    }
-}
 
 // TODO consiider implementing *= u8; migght be the fastest option here (MulAssign)
 
@@ -799,7 +739,7 @@ fn decimal_digits(n: u64) -> u32 {
     }
 }
 
-macro_rules! impl_from_unsigned_primitive_no_from_spec {
+macro_rules! impl_from_unsigned_primitive_u8 {
     ($u:ty) => {
         impl<'a> Add<$u> for UnsignedDCNumber<'a> {
             type Output = UnsignedDCNumber<'a>;
@@ -836,7 +776,7 @@ macro_rules! impl_from_unsigned_primitive {
             }
         }
 
-        impl_from_unsigned_primitive_no_from_spec!($u);
+        impl_from_unsigned_primitive_u8!($u);
     };
 }
 
@@ -860,7 +800,71 @@ impl<'a> From<u8> for UnsignedDCNumber<'a> {
         small_ints::interned(n)
     }
 }
-impl_from_unsigned_primitive_no_from_spec![u8];
+
+
+impl<'a> Mul<u8> for UnsignedDCNumber<'a> {
+    type Output = UnsignedDCNumber<'a>;
+
+    fn mul(self, other: u8) -> Self::Output {
+        // optimize 0, 1, 10, 100
+
+        let mut separator = self.separator;
+        let mut digits = VecDeque::from(self.digits.into_owned());
+
+        let mut index = 0;
+        loop {
+            if index >= digits.len() {
+                break;
+            }
+
+            if digits[index] == 0 {
+                index += 1;
+                continue;
+            }
+
+            // we are really multiplying two u8 so w need an u16 for the result without error
+            let mut result = digits[index] as u16 * other as u16;
+            {
+                // this handles the current digit, we need to overwrite what was there
+                digits[index] = lsd!(result);
+                result /= 10;
+
+                for index in (index.saturating_sub(3)..index).rev() {
+                    digits[index] += lsd![result];
+                    result /= 10;
+
+                    // here we handle the carry
+                    if digits[index] >= 10 {
+                        debug_assert!(digits[index] < 20);
+                        result += 1;
+                        digits[index] -= 10;
+                    }
+                }
+            }
+
+            // if we had "overflow" for this digit, we should create the right
+            while result > 0 {
+                digits.push_front(lsd![result]);
+                separator += 1;
+                index += 1;
+                result /= 10;
+            }
+            index += 1;
+        }
+
+        digits
+            .iter()
+            .enumerate()
+            .rposition(|(i, &ch)| ch != 0 && i >= separator)
+            .map(|last_non_zero| digits.truncate(last_non_zero + 1))
+            .unwrap_or_else(|| digits.truncate(separator));
+
+        UnsignedDCNumber::new(Vec::from(digits), separator)
+    }
+}
+
+impl_from_unsigned_primitive_u8![u8];
+
 
 
 /// Creates UnsignedDCNumber from unsigned integer
