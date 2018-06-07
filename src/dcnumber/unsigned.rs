@@ -623,14 +623,9 @@ impl<'a> Display for UnsignedDCNumber<'a> {
     }
 }
 
-impl<'a> Add<u64> for UnsignedDCNumber<'a> {
-    type Output = UnsignedDCNumber<'a>;
 
-    fn add(self, other: u64) -> Self::Output {
-        // TODO make this more efficient by implementing Add "in place"
-        self + UnsignedDCNumber::from(other)
-    }
-}
+
+
 
 macro_rules! lsd {
     ($n:expr) => {
@@ -804,6 +799,19 @@ fn decimal_digits(n: u64) -> u32 {
     }
 }
 
+macro_rules! impl_from_unsigned_primitive_no_from_spec {
+    ($u:ty) => {
+        impl<'a> Add<$u> for UnsignedDCNumber<'a> {
+            type Output = UnsignedDCNumber<'a>;
+
+            fn add(self, other: $u) -> Self::Output {
+                // TODO make this more efficient by implementing Add "in place"
+                self + UnsignedDCNumber::from(other)
+            }
+        }
+    };
+}
+
 macro_rules! impl_from_unsigned_primitive {
     ($u:ty) => {
         impl<'a> From<$u> for UnsignedDCNumber<'a> {
@@ -827,6 +835,8 @@ macro_rules! impl_from_unsigned_primitive {
                 UnsignedDCNumber::with_integer_digits(digits)
             }
         }
+
+        impl_from_unsigned_primitive_no_from_spec!($u);
     };
 }
 
@@ -850,6 +860,8 @@ impl<'a> From<u8> for UnsignedDCNumber<'a> {
         small_ints::interned(n)
     }
 }
+impl_from_unsigned_primitive_no_from_spec![u8];
+
 
 /// Creates UnsignedDCNumber from unsigned integer
 ///
@@ -1485,7 +1497,7 @@ mod tests {
             fn $test_name() {
                 assert_eq!(
                                             udcn![stringify!($expected)],
-                                            udcn![stringify!($lhs)] $op $rhs,
+                                            udcn![stringify!($lhs)] $op $rhs as u8,
                                         );
             }
         };
