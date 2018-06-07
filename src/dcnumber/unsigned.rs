@@ -427,10 +427,10 @@ impl<'a> UnsignedDCNumber<'a> {
     /// use rdc::dcnumber::unsigned::UnsignedDCNumber;
     /// use rdc::dcnumber::error::ParseDCNumberError;
     /// use rdc::dcnumber::traits::FromBytes;
-    /// ```
-    /// TODO put me back
+    ///
     /// assert_eq!(UnsignedDCNumber::from_bytes_radix("0".as_ref(), 8), UnsignedDCNumber::from_byte_radix(b'0', 8));
     /// assert_eq!(UnsignedDCNumber::from_bytes_radix("0".as_ref(), 8), UnsignedDCNumber::from_byte_radix(b'0', 10));
+    /// ```
     pub fn from_byte_radix(byte: u8, radix: u32) -> Result<Self, ParseDCNumberError> {
         if radix > 16 {
             return Err(ParseDCNumberError::InvalidRadix);
