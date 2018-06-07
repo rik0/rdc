@@ -1332,8 +1332,7 @@ mod tests {
 
                 #[test]
                 fn str_bytes2() {
-                    assert_eq!(
-                        UnsignedDCNumber::from_str(stringify!($digits).as_ref())
+                    assert_eq!( UnsignedDCNumber::from_str(stringify!($digits).as_ref())
                             .expect(stringify!($digits)),
                         FromBytes::from_bytes(stringify!($digits).as_ref())
                             .expect(stringify!($digits)),
@@ -1354,7 +1353,31 @@ mod tests {
     }
 
     macro_rules! test_from_byte_radix {
+            ($test_name:ident : $digits:tt; 10) => {
+                mod $test_name {
+                    use super::*;
+
+                    #[test]
+                    fn from_byte() {
+                        assert_eq!(
+                            UnsignedDCNumber::from_bytes_radix(stringify!($digits).as_ref(), 10),
+                            UnsignedDCNumber::from_byte(stringify!($digits).as_bytes()[0])
+                        )
+                    }
+
+                    #[test]
+                    fn from_byte_radix() {
+                        assert_eq!(
+                            UnsignedDCNumber::from_bytes_radix(stringify!($digits).as_ref(), 10),
+                            UnsignedDCNumber::from_byte_radix(stringify!($digits).as_bytes()[0], 10)
+                        )
+                    }
+
+                }
+
+        };
         ($test_name:ident : $digits:tt; $radix:expr) => {
+
             #[test]
             fn $test_name() {
                 assert_eq!(
@@ -1363,10 +1386,28 @@ mod tests {
                 )
             }
         };
+        ($test_name:ident : $lhs_digits:expr, $lhs_radix:expr; $rhs_digits:expr) => {
+            mod $test_name {
+                use super::*;
 
-        (
-            $test_name:ident : $lhs_digits:expr, $lhs_radix:expr; $rhs_digits:expr, $rhs_radix:expr
-        ) => {
+                #[test]
+                fn from_byte() {
+                    assert_eq!(
+                        UnsignedDCNumber::from_byte_radix($lhs_digits, $lhs_radix),
+                        UnsignedDCNumber::from_byte($rhs_digits, 10),
+                    );
+                }
+
+                #[test]
+                fn from_byte_radix() {
+                    assert_eq!(
+                        UnsignedDCNumber::from_byte_radix($lhs_digits, $lhs_radix),
+                        UnsignedDCNumber::from_byte_radix($rhs_digits, 10),
+                    );
+                }
+            }
+        };
+        ($test_name:ident : $lhs_digits:expr, $lhs_radix:expr; $rhs_digits:expr, $rhs_radix:expr) => {
             #[test]
             fn $test_name() {
                 assert_eq!(
