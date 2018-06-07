@@ -994,7 +994,7 @@ mod radix_converters {
             let radix = self.radix;
             bytes.iter().fold(Ok(ZERO.clone()), |acc, &ch| {
                 acc.and_then(|n| {
-                    UnsignedDCNumber::from_byte_radix_u8(ch, radix).and_then(|m| Ok(m + (n * 10)))
+                    UnsignedDCNumber::from_byte_radix_u8(ch, radix).and_then(|m| Ok(m + (n * radix)))
                 })
             })
         }
@@ -1006,6 +1006,7 @@ impl<'a> FromBytes for UnsignedDCNumber<'a> {
 
     fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
         use self::radix_converters::AsciiConverter;
+        eprintln!("CMP DEBUG XXXXXXXX   bytes={0:?} radix={1}", bytes, radix);
 
         match radix {
             2...9 => radix_converters::RadixAsciiConverter::new(radix as u8).convert_bytes(bytes),
@@ -1784,14 +1785,14 @@ mod tests {
 
     // TODO reenable when we are done with radix conversions
         from_bytes_radix![first_hex: 10 = A: 16];
-//        from_bytes_radix![b2_10: 2 = 10: 2];
-//        from_bytes_radix![b3_10: 3 = 10: 3];
-//        from_bytes_radix![b4_10: 4 = 10: 4];
-//        from_bytes_radix![b5_10: 5 = 10: 5];
-//        from_bytes_radix![b6_10: 6 = 10: 6];
-//        from_bytes_radix![b7_10: 7 = 10: 7];
-//        from_bytes_radix![b8_10: 8 = 10: 8];
-//        from_bytes_radix![b9_10: 9 = 10: 9];
+        from_bytes_radix![b2_10: 2 = 10: 2];
+        from_bytes_radix![b3_10: 3 = 10: 3];
+        from_bytes_radix![b4_10: 4 = 10: 4];
+        from_bytes_radix![b5_10: 5 = 10: 5];
+        from_bytes_radix![b6_10: 6 = 10: 6];
+        from_bytes_radix![b7_10: 7 = 10: 7];
+        from_bytes_radix![b8_10: 8 = 10: 8];
+        from_bytes_radix![b9_10: 9 = 10: 9];
     from_bytes_radix![b8_0: 0 = 0: 8];
     from_bytes_radix![b8_1: 1 = 1: 8];
     from_bytes_radix![b8_2: 2 = 2: 8];
