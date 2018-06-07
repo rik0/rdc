@@ -1986,25 +1986,25 @@ mod tests {
     }
 
     // TODO reenable when we are done with radix conversions
-    //    from_bytes_radix![first_hex: 10 = A: 16];
-    //    from_bytes_radix![b2_10: 2 = 10: 2];
-    //    from_bytes_radix![b3_10: 3 = 10: 3];
-    //    from_bytes_radix![b4_10: 4 = 10: 4];
-    //    from_bytes_radix![b5_10: 5 = 10: 5];
-    //    from_bytes_radix![b6_10: 6 = 10: 6];
-    //    from_bytes_radix![b7_10: 7 = 10: 7];
-    //    from_bytes_radix![b8_10: 8 = 10: 8];
-    //    from_bytes_radix![b9_10: 9 = 10: 9];
-//    from_bytes_radix![b8_0: 0 = 0: 8];
-//    from_bytes_radix![b8_1: 1 = 1: 8];
-//    from_bytes_radix![b8_2: 2 = 2: 8];
+        from_bytes_radix![first_hex: 10 = A: 16];
+//        from_bytes_radix![b2_10: 2 = 10: 2];
+//        from_bytes_radix![b3_10: 3 = 10: 3];
+//        from_bytes_radix![b4_10: 4 = 10: 4];
+//        from_bytes_radix![b5_10: 5 = 10: 5];
+//        from_bytes_radix![b6_10: 6 = 10: 6];
+//        from_bytes_radix![b7_10: 7 = 10: 7];
+//        from_bytes_radix![b8_10: 8 = 10: 8];
+//        from_bytes_radix![b9_10: 9 = 10: 9];
+    from_bytes_radix![b8_0: 0 = 0: 8];
+    from_bytes_radix![b8_1: 1 = 1: 8];
+    from_bytes_radix![b8_2: 2 = 2: 8];
     from_bytes_radix![b10_0: 0 = 0: 10];
     from_bytes_radix![b10_1: 1 = 1: 10];
     from_bytes_radix![b10_2: 2 = 2: 10];
-//    from_bytes_radix![b16_0: 0 = 0: 16];
-//    from_bytes_radix![b16_1: 1 = 1: 16];
-//    from_bytes_radix![b16_2: 2 = 2: 16];
-//    from_bytes_radix![b16_A: 10 = A: 16];
+    from_bytes_radix![b16_0: 0 = 0: 16];
+    from_bytes_radix![b16_1: 1 = 1: 16];
+    from_bytes_radix![b16_2: 2 = 2: 16];
+    from_bytes_radix![b16_A: 10 = A: 16];
 
     bench_from_str![short_int: "3"];
     bench_from_str![mid_int: "17235428"];

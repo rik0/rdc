@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::iter::Rev;
 
 pub trait CarryingIterator {
     type Item;
