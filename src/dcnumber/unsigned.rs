@@ -1712,6 +1712,10 @@ mod tests {
     test_binop![test_integers: 1026 = 520 + 506];
     test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
     test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
+    test_binop![test_add_le:10.1 = 9.9 + 0.2];
+    test_binop![test_add_le2:10.12 = 9.9 + 0.22];
+    test_binop![test_add_le3:10.12 = 9.92 + 0.2];
+    test_binop![test_add_le4:10.12 = 0.92 + 9.2];
 
     mod mul {
         use super::*;
