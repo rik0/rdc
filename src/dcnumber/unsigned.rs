@@ -1751,6 +1751,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn test_from_u8() {
         use std::io::Write;
         for i in 0..256 {
