@@ -1492,6 +1492,8 @@ mod tests {
     test_binop![test_add_le2:10.12 = 9.9 + 0.22];
     test_binop![test_add_le3:10.12 = 9.92 + 0.2];
     test_binop![test_add_le4:10.12 = 0.92 + 9.2];
+    test_binop![test_add_le5:1000.12 = 990.92 + 9.2];
+    test_binop![test_add_le6:1000.12 = 999.92 + 0.2];
 
     mod mul {
         use super::*;
