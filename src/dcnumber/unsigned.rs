@@ -1329,6 +1329,17 @@ mod tests {
                     );
                 }
 
+
+                #[test]
+                fn str_bytes2() {
+                    assert_eq!(
+                        UnsignedDCNumber::from_str(stringify!($digits).as_ref())
+                            .expect(stringify!($digits)),
+                        FromBytes::from_bytes(stringify!($digits).as_ref())
+                            .expect(stringify!($digits)),
+                    );
+                }
+
                 #[test]
                 fn str_bytes_radix() {
                     assert_eq!(
