@@ -1551,20 +1551,20 @@ mod tests {
         };
     }
 
-//    test_from_byte_radix!(from_byte_radix_1_8: 1; 8);
-//    test_from_byte_radix!(from_byte_radix_2_8: 2; 8);
-//    test_from_byte_radix!(from_byte_radix_3_8: 3; 8);
-//    test_from_byte_radix!(from_byte_radix_4_8: 4; 8);
-//    test_from_byte_radix!(from_byte_radix_5_8: 5; 8);
-//    test_from_byte_radix!(from_byte_radix_6_8: 6; 8);
-//    test_from_byte_radix!(from_byte_radix_7_8: 7; 8);
-//    test_from_byte_radix!(from_byte_radix_8_8: 8; 8);
-//    test_from_byte_radix!(from_byte_radix_9_8: 9; 8);
-//    test_from_byte_radix!(from_byte_radix_8_10: 8; 10);
-//    test_from_byte_radix!(from_byte_radix_9_10: 9; 10);
-//    test_from_byte_radix!(from_byte_radix_A_8: A; 8);
-//    test_from_byte_radix!(from_byte_radix_A_10: A; 10);
-//    test_from_byte_radix!(from_byte_radix_A_16: A; 16);
+    test_from_byte_radix!(from_byte_radix_1_8: 1; 8);
+    test_from_byte_radix!(from_byte_radix_2_8: 2; 8);
+    test_from_byte_radix!(from_byte_radix_3_8: 3; 8);
+    test_from_byte_radix!(from_byte_radix_4_8: 4; 8);
+    test_from_byte_radix!(from_byte_radix_5_8: 5; 8);
+    test_from_byte_radix!(from_byte_radix_6_8: 6; 8);
+    test_from_byte_radix!(from_byte_radix_7_8: 7; 8);
+    test_from_byte_radix!(from_byte_radix_8_8: 8; 8);
+    test_from_byte_radix!(from_byte_radix_9_8: 9; 8);
+    test_from_byte_radix!(from_byte_radix_8_10: 8; 10);
+    test_from_byte_radix!(from_byte_radix_9_10: 9; 10);
+    test_from_byte_radix!(from_byte_radix_A_8: A; 8);
+    test_from_byte_radix!(from_byte_radix_A_10: A; 10);
+    test_from_byte_radix!(from_byte_radix_A_16: A; 16);
 
     fn test_regression_A_16() {
         let n = UnsignedDCNumber::from_str_radix("A", 16).expect("A in hex should be fine");
