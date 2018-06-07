@@ -1503,6 +1503,8 @@ mod tests {
     test_binop![test_add_le4:10.12 = 0.92 + 9.2];
     test_binop![test_add_le5:1000.12 = 990.92 + 9.2];
     test_binop![test_add_le6:1000.12 = 999.92 + 0.2];
+    test_binop![u8 test_add_zero_u8: 0 = 0 + 0];
+    test_binop![u8 test_add_unit_u8: 1 = 0 + 1];
 
     mod mul {
         use super::*;
@@ -1821,7 +1823,7 @@ mod tests {
     from_primitive_int!(test_123u8: 123, u8);
     from_primitive_int!(test_223u8: 223, u8);
     from_primitive_int!(test_255u8: 255, u8);
-    
+
     from_primitive_int!(test_0_u16: 0, u16);
     from_primitive_int!(test_1_u16: 1, u16);
     from_primitive_int!(test_2_u16: 2, u16);
