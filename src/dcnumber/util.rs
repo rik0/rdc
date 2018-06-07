@@ -262,7 +262,7 @@ mod test {
     #[test]
     fn rev() {
         let v = vec![2u8, 3u8];
-        let mut expected = vec![3u8, 2u8];
+        let expected = vec![3u8, 2u8];
 
         let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
             .to_iter(0u8).collect();
@@ -272,7 +272,7 @@ mod test {
     #[test]
     fn rev_carry() {
         let v = vec![2u8, 3u8];
-        let mut expected = vec![3u8, 2u8, 1u8];
+        let expected = vec![3u8, 2u8, 1u8];
 
         let actual: Vec<u8> = carrying(v.clone().into_iter().rev())
             .with_carry(true)
@@ -326,7 +326,7 @@ mod test {
         use std::iter::Iterator;
         let mut v = vec![2u32];
         let x: Vec<u32> = carrying(v.clone())
-            .carrying_map(|carry, x| (true, x))
+            .carrying_map(|_carry, x| (true, x))
             .to_iter(1u32)
             .collect();
 
@@ -337,8 +337,8 @@ mod test {
 
     #[test]
     fn chain_carry_carry_false() {
-        let mut v = vec![2u32];
-        let mut u = vec![3u32];
+        let v = vec![2u32];
+        let u = vec![3u32];
 
         let actual: Vec<u32> = carrying(v.into_iter())
             .carrying_chain(carrying(u.into_iter()))
@@ -350,12 +350,12 @@ mod test {
 
     #[test]
     fn chain_carry_carry_true() {
-        let mut v = vec![2u32];
-        let mut u = vec![3u32];
+        let v = vec![2u32];
+        let u = vec![3u32];
 
         let actual: Vec<u32> = carrying(v.into_iter())
             .carrying_chain(carrying(u.into_iter()))
-            .carrying_map(|carry, v| (true, v))
+            .carrying_map(|_carry, v| (true, v))
             .to_iter(4u32)
             .collect();
 

@@ -1,4 +1,4 @@
-use num::ToPrimitive;
+use num::{self, ToPrimitive};
 use std::borrow::Cow;
 use std::cmp::{max, Ordering};
 use std::collections::VecDeque;
@@ -9,8 +9,6 @@ use std::fmt::Formatter;
 use std::iter::{self, Iterator};
 use std::ops::{Add, Mul, Range};
 use std::str::FromStr;
-
-use super::util::{carrying, CarryingIterator};
 
 use super::error::ParseDCNumberError;
 use super::traits::FromBytes;
@@ -476,7 +474,6 @@ impl<'a> UnsignedDCNumber<'a> {
     }
 
     fn cmp_unsigned<'b>(&self, other: &UnsignedDCNumber<'b>) -> Ordering {
-        eprintln!("CMP DEBUG XXXXXXXX   self= {:?} other= {:?}", self, other);
         let self_integer = self.integer_magnitude();
         let other_integer = other.integer_magnitude();
         match self_integer.cmp(&other_integer) {
@@ -545,10 +542,6 @@ impl<'a> DCNumberAlignment<'a> {
             second_aligned_part,
             fractional_tail,
         }
-    }
-
-    fn len(&self) -> usize {
-        self.fractional_tail.len() + self.aligned_part.len() + self.leading_digits.len()
     }
 }
 
@@ -636,6 +629,14 @@ macro_rules! lsd {
 
 // TODO consiider implementing *= u8; migght be the fastest option here (MulAssign)
 
+impl<'a> Mul<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
+    type Output = UnsignedDCNumber<'a>;
+
+    fn mul(self, _rhs: UnsignedDCNumber) -> Self {
+        unimplemented!()
+    }
+}
+
 impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
     type Output = UnsignedDCNumber<'a>;
 
@@ -645,7 +646,6 @@ impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
 
         let mut separator = max(self.separator, other.separator);
         let alignment = DCNumberAlignment::align_ref(&self, &other);
-        let total_len = alignment.len();
         let DCNumberAlignment {
             leading_digits,
             aligned_part,
@@ -702,17 +702,36 @@ impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
     }
 }
 
+
 // TODO consider if implementing Add<&> allows us faster
 
-// impl <'a> num::Zero for UnsignedDCNumber<'a> {
-//     fn zero() -> Self {
-//         ZERO.clone()
-//     }
+impl<'a> num::Zero for UnsignedDCNumber<'a> {
+    fn zero() -> Self {
+        ZERO.clone()
+    }
 
-//     fn is_zero(&self) -> bool {
-//         false
-//     }
-// }
+    fn is_zero(&self) -> bool {
+        if self == &ZERO {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl<'a> num::One for UnsignedDCNumber<'a> {
+    fn one() -> Self {
+        ONE.clone()
+    }
+
+    fn is_one(&self) -> bool where Self: PartialEq {
+        if self == &ONE {
+            true
+        } else {
+            false
+        }
+    }
+}
 
 // we should make this for all integers...
 
@@ -1021,7 +1040,6 @@ impl<'a> FromBytes for UnsignedDCNumber<'a> {
 
     fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
         use self::radix_converters::AsciiConverter;
-        eprintln!("CMP DEBUG XXXXXXXX   bytes={0:?} radix={1}", bytes, radix);
 
         match radix {
             2...9 => radix_converters::RadixAsciiConverter::new(radix as u8).convert_bytes(bytes),
@@ -1362,9 +1380,9 @@ mod tests {
     test_from_byte_radix!(from_byte_radix_9_8: 9; 8);
     test_from_byte_radix!(from_byte_radix_8_10: 8; 10);
     test_from_byte_radix!(from_byte_radix_9_10: 9; 10);
-    test_from_byte_radix!(from_byte_radix_A_8: A; 8);
-    test_from_byte_radix!(from_byte_radix_A_10: A; 10);
-    test_from_byte_radix!(from_byte_radix_A_16: A; 16);
+    test_from_byte_radix!(from_byte_radix_a_8: A; 8);
+    test_from_byte_radix!(from_byte_radix_a_10: A; 10);
+    test_from_byte_radix!(from_byte_radix_a_16: A; 16);
 
     #[test]
     fn test_regression_a_16() {
@@ -1814,7 +1832,7 @@ mod tests {
     from_bytes_radix![b16_0: 0 = 0: 16];
     from_bytes_radix![b16_1: 1 = 1: 16];
     from_bytes_radix![b16_2: 2 = 2: 16];
-    from_bytes_radix![b16_A: 10 = A: 16];
+    from_bytes_radix![b16_a: 10 = A: 16];
 
     bench_from_str![short_int: "3"];
     bench_from_str![mid_int: "17235428"];
@@ -1868,5 +1886,18 @@ mod tests {
     from_primitive_int!(test_123u64: 123, u64);
     from_primitive_int!(test_223u64: 223, u64);
     from_primitive_int!(test_255u64: 255, u64);
+
+    #[test]
+    fn test_zero_and_one() {
+        use num::Zero;
+        use num::One;
+
+        assert_eq!(ZERO, UnsignedDCNumber::zero());
+        assert_eq!(ONE, UnsignedDCNumber::one());
+        assert!(UnsignedDCNumber::zero().is_zero());
+        assert!(!UnsignedDCNumber::one().is_zero());
+        assert!(!UnsignedDCNumber::zero().is_one());
+        assert!(UnsignedDCNumber::one().is_one());
+    }
 
 }
