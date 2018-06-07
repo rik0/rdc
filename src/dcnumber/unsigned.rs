@@ -1355,7 +1355,8 @@ mod tests {
     test_from_byte_radix!(from_byte_radix_A_10: A; 10);
     test_from_byte_radix!(from_byte_radix_A_16: A; 16);
 
-    fn test_regression_A_16() {
+    #[test]
+    fn test_regression_a_16() {
         let n = UnsignedDCNumber::from_str_radix("A", 16).expect("A in hex should be fine");
         assert_eq!(UnsignedDCNumber::new([1, 0].as_ref(), 2), n);
     }
