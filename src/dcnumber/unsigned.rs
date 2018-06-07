@@ -1126,9 +1126,6 @@ impl<'a> FromBytes for UnsignedDCNumber<'a> {
         Ok(UnsignedDCNumber::new(digits, separator))
     }
 
-    fn from_str_radix(s: &str, radix: u32) -> Result<Self, ParseDCNumberError> {
-        UnsignedDCNumber::from_bytes_radix(s.as_ref(), radix)
-    }
 }
 
 impl<'a> FromStr for UnsignedDCNumber<'a> {
@@ -1603,7 +1600,7 @@ mod tests {
         );
     }
 
-    macro_rules! test_from_str {
+    macro_rules! test_from_bytes {
         ($test_name:ident : $error_id:tt <- $digits:tt) => {
             mod $test_name {
                 use super::*;
@@ -1616,8 +1613,9 @@ mod tests {
                     );
                 }
 
+
                 #[test]
-                fn from_bytes() {
+                fn from_bytes2() {
                     assert_eq!(
                         Err(ParseDCNumberError::$error_id),
                         UnsignedDCNumber::from_bytes($digits.as_ref())
@@ -1656,6 +1654,15 @@ mod tests {
                     assert_eq!(
                         $expected,
                         UnsignedDCNumber::from_bytes(stringify!($digits).as_ref())
+                            .expect(stringify!($digits))
+                    );
+                }
+
+                #[test]
+                fn from_bytes2() {
+                    assert_eq!(
+                        $expected,
+                        FromBytes::from_bytes(stringify!($digits).as_ref())
                             .expect(stringify!($digits))
                     );
                 }
@@ -1738,21 +1745,21 @@ mod tests {
         };
     }
 
-    test_from_str![from_str_zero: ZERO ; 0];
-    test_from_str![from_str_one:  ONE ; 1];
-    test_from_str![from_str_10: UnsignedDCNumber::new([1, 0].as_ref(), 2) ; 10];
-    test_from_str![from_str_byte_spec: UnsignedDCNumber::new([1, 1].as_ref(), 1) ; 1.1];
-    test_from_str![from_str_0dot9: UnsignedDCNumber::new([0, 9].as_ref(), 1) ; 0.9];
-    test_from_str![from_str_1000dot3: UnsignedDCNumber::new([1, 0, 0, 0, 3].as_ref(), 4) ; 1000.3];
-    test_from_str![from_str_0dot01: UnsignedDCNumber::new([0, 0, 1].as_ref(), 1) ; 0.01];
-    test_from_str![from_str_from_int: UnsignedDCNumber::from(1234 as u16) ; 1234 ];
-    test_from_str![from_str_from_int_leading0: UnsignedDCNumber::from(1234 as u16) ; 01234];
-    test_from_str![from_str_empty : EmptyString <- ""];
-    test_from_str![from_str_a : InvalidDigit <- "a"];
-    test_from_str![from_str_1a : InvalidDigit <- "1a]"];
-    test_from_str![from_str_0a : InvalidDigit <- "0a"];
-    test_from_str![from_str_dota : InvalidDigit <- ".a"];
-    test_from_str![from_str_0dotdot0: RepeatedDot <- "0..0"];
+    test_from_bytes![from_str_zero: ZERO ; 0];
+    test_from_bytes![from_str_one:  ONE ; 1];
+    test_from_bytes![from_str_10: UnsignedDCNumber::new([1, 0].as_ref(), 2) ; 10];
+    test_from_bytes![from_str_byte_spec: UnsignedDCNumber::new([1, 1].as_ref(), 1) ; 1.1];
+    test_from_bytes![from_str_0dot9: UnsignedDCNumber::new([0, 9].as_ref(), 1) ; 0.9];
+    test_from_bytes![from_str_1000dot3: UnsignedDCNumber::new([1, 0, 0, 0, 3].as_ref(), 4) ; 1000.3];
+    test_from_bytes![from_str_0dot01: UnsignedDCNumber::new([0, 0, 1].as_ref(), 1) ; 0.01];
+    test_from_bytes![from_str_from_int: UnsignedDCNumber::from(1234 as u16) ; 1234 ];
+    test_from_bytes![from_str_from_int_leading0: UnsignedDCNumber::from(1234 as u16) ; 01234];
+    test_from_bytes![from_str_empty : EmptyString <- ""];
+    test_from_bytes![from_str_a : InvalidDigit <- "a"];
+    test_from_bytes![from_str_1a : InvalidDigit <- "1a]"];
+    test_from_bytes![from_str_0a : InvalidDigit <- "0a"];
+    test_from_bytes![from_str_dota : InvalidDigit <- ".a"];
+    test_from_bytes![from_str_0dotdot0: RepeatedDot <- "0..0"];
     test_eq![from_tail0 : 1234.32 = 1234.320 ];
     test_eq![from_taildot0 : 1234 = 1234.0 ];
     test_eq![from_ident : 1234 = 1234.];
