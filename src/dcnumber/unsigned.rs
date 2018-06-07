@@ -10,8 +10,7 @@ use std::iter::{self, Iterator};
 use std::ops::{Add, Mul, Range};
 use std::str::FromStr;
 
-use super::util::{CarryingIterator, carrying};
-
+use super::util::{carrying, CarryingIterator};
 
 use super::error::ParseDCNumberError;
 use super::traits::FromBytes;
@@ -335,49 +334,41 @@ mod small_ints {
     static_unsigned_dcnumber![N254; N254_DIGITS: [u8; 3] = [2, 5, 4]];
     static_unsigned_dcnumber![N255; N255_DIGITS: [u8; 3] = [2, 5, 5]];
 
-    static SMALL_INTS: [&UnsignedDCNumber;256] = [
-        &N0, &N1, &N2, &N3, &N4, &N5, &N6, &N7, &N8, &N9,
-        &N10, &N11, &N12, &N13, &N14, &N15, &N16, &N17, &N18, &N19,
-        &N20, &N21, &N22, &N23, &N24, &N25, &N26, &N27, &N28, &N29,
-        &N30, &N31, &N32, &N33, &N34, &N35, &N36, &N37, &N38, &N39,
-        &N40, &N41, &N42, &N43, &N44, &N45, &N46, &N47, &N48, &N49,
-        &N50, &N51, &N52, &N53, &N54, &N55, &N56, &N57, &N58, &N59,
-        &N60, &N61, &N62, &N63, &N64, &N65, &N66, &N67, &N68, &N69,
-        &N70, &N71, &N72, &N73, &N74, &N75, &N76, &N77, &N78, &N79,
-        &N80, &N81, &N82, &N83, &N84, &N85, &N86, &N87, &N88, &N89,
-        &N90, &N91, &N92, &N93, &N94, &N95, &N96, &N97, &N98, &N99,
-        &N100, &N101, &N102, &N103, &N104, &N105, &N106, &N107, &N108, &N109,
-        &N110, &N111, &N112, &N113, &N114, &N115, &N116, &N117, &N118, &N119,
-        &N120, &N121, &N122, &N123, &N124, &N125, &N126, &N127, &N128, &N129,
-        &N130, &N131, &N132, &N133, &N134, &N135, &N136, &N137, &N138, &N139,
-        &N140, &N141, &N142, &N143, &N144, &N145, &N146, &N147, &N148, &N149,
-        &N150, &N151, &N152, &N153, &N154, &N155, &N156, &N157, &N158, &N159,
-        &N160, &N161, &N162, &N163, &N164, &N165, &N166, &N167, &N168, &N169,
-        &N170, &N171, &N172, &N173, &N174, &N175, &N176, &N177, &N178, &N179,
-        &N180, &N181, &N182, &N183, &N184, &N185, &N186, &N187, &N188, &N189,
-        &N190, &N191, &N192, &N193, &N194, &N195, &N196, &N197, &N198, &N199,
-        &N200, &N201, &N202, &N203, &N204, &N205, &N206, &N207, &N208, &N209,
-        &N210, &N211, &N212, &N213, &N214, &N215, &N216, &N217, &N218, &N219,
-        &N220, &N221, &N222, &N223, &N224, &N225, &N226, &N227, &N228, &N229,
-        &N230, &N231, &N232, &N233, &N234, &N235, &N236, &N237, &N238, &N239,
-        &N240, &N241, &N242, &N243, &N244, &N245, &N246, &N247, &N248, &N249,
-        &N250, &N251, &N252, &N253, &N254, &N255
+    static SMALL_INTS: [&UnsignedDCNumber; 256] = [
+        &N0, &N1, &N2, &N3, &N4, &N5, &N6, &N7, &N8, &N9, &N10, &N11, &N12, &N13, &N14, &N15, &N16,
+        &N17, &N18, &N19, &N20, &N21, &N22, &N23, &N24, &N25, &N26, &N27, &N28, &N29, &N30, &N31,
+        &N32, &N33, &N34, &N35, &N36, &N37, &N38, &N39, &N40, &N41, &N42, &N43, &N44, &N45, &N46,
+        &N47, &N48, &N49, &N50, &N51, &N52, &N53, &N54, &N55, &N56, &N57, &N58, &N59, &N60, &N61,
+        &N62, &N63, &N64, &N65, &N66, &N67, &N68, &N69, &N70, &N71, &N72, &N73, &N74, &N75, &N76,
+        &N77, &N78, &N79, &N80, &N81, &N82, &N83, &N84, &N85, &N86, &N87, &N88, &N89, &N90, &N91,
+        &N92, &N93, &N94, &N95, &N96, &N97, &N98, &N99, &N100, &N101, &N102, &N103, &N104, &N105,
+        &N106, &N107, &N108, &N109, &N110, &N111, &N112, &N113, &N114, &N115, &N116, &N117, &N118,
+        &N119, &N120, &N121, &N122, &N123, &N124, &N125, &N126, &N127, &N128, &N129, &N130, &N131,
+        &N132, &N133, &N134, &N135, &N136, &N137, &N138, &N139, &N140, &N141, &N142, &N143, &N144,
+        &N145, &N146, &N147, &N148, &N149, &N150, &N151, &N152, &N153, &N154, &N155, &N156, &N157,
+        &N158, &N159, &N160, &N161, &N162, &N163, &N164, &N165, &N166, &N167, &N168, &N169, &N170,
+        &N171, &N172, &N173, &N174, &N175, &N176, &N177, &N178, &N179, &N180, &N181, &N182, &N183,
+        &N184, &N185, &N186, &N187, &N188, &N189, &N190, &N191, &N192, &N193, &N194, &N195, &N196,
+        &N197, &N198, &N199, &N200, &N201, &N202, &N203, &N204, &N205, &N206, &N207, &N208, &N209,
+        &N210, &N211, &N212, &N213, &N214, &N215, &N216, &N217, &N218, &N219, &N220, &N221, &N222,
+        &N223, &N224, &N225, &N226, &N227, &N228, &N229, &N230, &N231, &N232, &N233, &N234, &N235,
+        &N236, &N237, &N238, &N239, &N240, &N241, &N242, &N243, &N244, &N245, &N246, &N247, &N248,
+        &N249, &N250, &N251, &N252, &N253, &N254, &N255,
     ];
 
     pub fn interned<'a>(n: u8) -> UnsignedDCNumber<'static> {
         unsafe {
-//            debug_assert!(u8::max_value() as usize <= SMALL_INTS.len());
+            //            debug_assert!(u8::max_value() as usize <= SMALL_INTS.len());
             let r = *SMALL_INTS.get_unchecked(n as usize);
             r.clone()
-
         }
     }
 }
 
 impl<'a> UnsignedDCNumber<'a> {
     pub fn new<T>(digits: T, last_integer: usize) -> Self
-        where
-            Cow<'a, [u8]>: From<T>,
+    where
+        Cow<'a, [u8]>: From<T>,
     {
         let v: Cow<[u8]> = digits.into();
         debug_assert!(
@@ -395,8 +386,8 @@ impl<'a> UnsignedDCNumber<'a> {
     }
 
     pub fn with_integer_digits<T>(digits: T) -> Self
-        where
-            Cow<'a, [u8]>: From<T>,
+    where
+        Cow<'a, [u8]>: From<T>,
     {
         let digits: Cow<'a, [u8]> = digits.into();
         let size = digits.len();
@@ -448,7 +439,6 @@ impl<'a> UnsignedDCNumber<'a> {
             _ => Err(ParseDCNumberError::InvalidDigit),
         }
     }
-
 
     #[allow(dead_code)]
     #[inline]
@@ -513,8 +503,7 @@ struct DCNumberAlignment<'a> {
 }
 
 impl<'a> DCNumberAlignment<'a> {
-    fn align_ref(lhs: &'a UnsignedDCNumber, rhs: &'a UnsignedDCNumber) -> DCNumberAlignment<'a>
-    {
+    fn align_ref(lhs: &'a UnsignedDCNumber, rhs: &'a UnsignedDCNumber) -> DCNumberAlignment<'a> {
         let leading_digits;
         let right_aligned_part;
         let fractional_tail;
@@ -536,7 +525,6 @@ impl<'a> DCNumberAlignment<'a> {
             second_right_aligned_part = &lhs.digits;
         }
 
-
         if right_aligned_part.len() > second_right_aligned_part.len() {
             let offset = right_aligned_part.len() - second_right_aligned_part.len();
             let (front, tail) = right_aligned_part.split_at(offset);
@@ -551,7 +539,12 @@ impl<'a> DCNumberAlignment<'a> {
             second_aligned_part = right_aligned_part;
         }
 
-        DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail }
+        DCNumberAlignment {
+            leading_digits,
+            aligned_part,
+            second_aligned_part,
+            fractional_tail,
+        }
     }
 
     fn len(&self) -> usize {
@@ -718,14 +711,23 @@ impl<'a> Add for UnsignedDCNumber<'a> {
         let mut separator = max(self.separator, other.separator);
         let alignment = DCNumberAlignment::align_ref(&self, &other);
         let total_len = alignment.len();
-        let DCNumberAlignment { leading_digits, aligned_part, second_aligned_part, fractional_tail } = alignment;
+        let DCNumberAlignment {
+            leading_digits,
+            aligned_part,
+            second_aligned_part,
+            fractional_tail,
+        } = alignment;
 
         let mut carry = false;
         let mut digits: Vec<u8> = Vec::new();
 
-
         digits.extend(fractional_tail.iter().rev());
-        for (lhs, rhs) in aligned_part.iter().rev().cloned().zip(second_aligned_part.iter().rev().cloned()) {
+        for (lhs, rhs) in aligned_part
+            .iter()
+            .rev()
+            .cloned()
+            .zip(second_aligned_part.iter().rev().cloned())
+        {
             debug_assert!(lhs < 10);
             debug_assert!(rhs < 10);
             let sum = if carry {
@@ -744,11 +746,7 @@ impl<'a> Add for UnsignedDCNumber<'a> {
 
         for &digit in leading_digits.iter().rev() {
             debug_assert!(digit < 10);
-            let value = if carry {
-                digit + 1
-            } else {
-                digit
-            };
+            let value = if carry { digit + 1 } else { digit };
 
             let mut result = value;
             if result >= 10 {
@@ -994,7 +992,8 @@ mod radix_converters {
             let radix = self.radix;
             bytes.iter().fold(Ok(ZERO.clone()), |acc, &ch| {
                 acc.and_then(|n| {
-                    UnsignedDCNumber::from_byte_radix_u8(ch, radix).and_then(|m| Ok(m + (n * radix)))
+                    UnsignedDCNumber::from_byte_radix_u8(ch, radix)
+                        .and_then(|m| Ok(m + (n * radix)))
                 })
             })
         }
@@ -1118,7 +1117,6 @@ mod tests {
     #[test]
     fn test_split() {
         assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
-
     }
 
     #[test]
@@ -1151,12 +1149,11 @@ mod tests {
 
         let alignment = DCNumberAlignment::align_ref(&n, &m);
 
-        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([1,].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2].as_ref(), alignment.second_aligned_part);
         assert_eq!([6].as_ref(), alignment.fractional_tail);
     }
-
 
     #[test]
     fn test_align2() {
@@ -1165,12 +1162,11 @@ mod tests {
 
         let alignment = DCNumberAlignment::align_ref(&n, &m);
 
-        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([1,].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2, 3].as_ref(), alignment.second_aligned_part);
         assert_eq!([4, 5].as_ref(), alignment.fractional_tail);
     }
-
 
     #[test]
     fn test_align3() {
@@ -1207,12 +1203,11 @@ mod tests {
 
         let alignment = DCNumberAlignment::align_ref(&n, &m);
 
-        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([1,].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2].as_ref(), alignment.second_aligned_part);
         assert_eq!([6].as_ref(), alignment.fractional_tail);
     }
-
 
     #[test]
     fn test_align6() {
@@ -1221,12 +1216,11 @@ mod tests {
 
         let alignment = DCNumberAlignment::align_ref(&n, &m);
 
-        assert_eq!([1, ].as_ref(), alignment.leading_digits);
+        assert_eq!([1,].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2, 3].as_ref(), alignment.second_aligned_part);
         assert_eq!([4, 5].as_ref(), alignment.fractional_tail);
     }
-
 
     #[test]
     fn test_align7() {
@@ -1763,7 +1757,7 @@ mod tests {
             assert_eq!(i as u64, UnsignedDCNumber::from(i).to_u64().unwrap());
 
             let _ = write!(out, "{}", UnsignedDCNumber::from(i)).expect("write");
-            assert_eq!(i.to_string(), String::from_utf8(out).expect("utf8 issue"), )
+            assert_eq!(i.to_string(), String::from_utf8(out).expect("utf8 issue"),)
         }
     }
 
@@ -1784,15 +1778,15 @@ mod tests {
     }
 
     // TODO reenable when we are done with radix conversions
-        from_bytes_radix![first_hex: 10 = A: 16];
-        from_bytes_radix![b2_10: 2 = 10: 2];
-        from_bytes_radix![b3_10: 3 = 10: 3];
-        from_bytes_radix![b4_10: 4 = 10: 4];
-        from_bytes_radix![b5_10: 5 = 10: 5];
-        from_bytes_radix![b6_10: 6 = 10: 6];
-        from_bytes_radix![b7_10: 7 = 10: 7];
-        from_bytes_radix![b8_10: 8 = 10: 8];
-        from_bytes_radix![b9_10: 9 = 10: 9];
+    from_bytes_radix![first_hex: 10 = A: 16];
+    from_bytes_radix![b2_10: 2 = 10: 2];
+    from_bytes_radix![b3_10: 3 = 10: 3];
+    from_bytes_radix![b4_10: 4 = 10: 4];
+    from_bytes_radix![b5_10: 5 = 10: 5];
+    from_bytes_radix![b6_10: 6 = 10: 6];
+    from_bytes_radix![b7_10: 7 = 10: 7];
+    from_bytes_radix![b8_10: 8 = 10: 8];
+    from_bytes_radix![b9_10: 9 = 10: 9];
     from_bytes_radix![b8_0: 0 = 0: 8];
     from_bytes_radix![b8_1: 1 = 1: 8];
     from_bytes_radix![b8_2: 2 = 2: 8];
