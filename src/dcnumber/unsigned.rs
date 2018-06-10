@@ -605,7 +605,7 @@ fn inner_add_digits_ref<'a, 'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b
                     carry = false;
                     d + 1
                 } else { d };
-                if sum > 10 {
+                if sum >= 10 {
                     carry = true;
                     sum - 10
                 } else {
@@ -1741,12 +1741,18 @@ mod tests {
     test_binop![test_integers: 1026 = 520 + 506];
     test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
     test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
+    test_binop![test_add_f1:20143.043 = 17221.123 + 2921.92];
+    test_binop![test_add_f2:20143.043 = 7221.123 + 12921.92];
+    test_binop![test_add_f3:110143.043 = 107221.123 + 2921.92];
+    test_binop![test_add_f4:110143.043 = 7221.123 + 102921.92];
     test_binop![test_add_le:10.1 = 9.9 + 0.2];
     test_binop![test_add_le2:10.12 = 9.9 + 0.22];
     test_binop![test_add_le3:10.12 = 9.92 + 0.2];
     test_binop![test_add_le4:10.12 = 0.92 + 9.2];
     test_binop![test_add_le5:1000.12 = 990.92 + 9.2];
     test_binop![test_add_le6:1000.12 = 999.92 + 0.2];
+    test_binop![test_add_le7:1000.12 = 9.2 + 990.92];
+    test_binop![test_add_le8:1000.12 = 0.2 + 999.92];
     test_binop![u8 test_add_zero_u8: 0 = 0 + 0];
     test_binop![u8 test_add_unit_u8: 1 = 0 + 1];
 
