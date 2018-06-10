@@ -542,7 +542,7 @@ fn inner_add_digits_ref<'a, 'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b
         lhs_aligned_index = lhs.len() - 1;
     }
 
-    let mut lhs_aligned_end;
+    let lhs_aligned_end;
     let rhs_aligned_end;
     if lhs_separator > rhs_separator {
         lhs_aligned_end = lhs_separator - rhs_separator;
@@ -1718,10 +1718,15 @@ mod tests {
         ($test_name:ident : $expected:tt = $lhs:tt $op:tt $rhs:tt) => {
             #[test]
             fn $test_name() {
-                assert_eq!(
-                                            udcn![stringify!($expected)],
-                                            udcn![stringify!($lhs)] $op udcn![stringify!($rhs)],
-                                        );
+                let expected = udcn![stringify!($expected)];
+                let lhs = udcn![stringify!($lhs)];
+                let rhs = udcn![stringify!($rhs)];
+
+                assert_eq!(expected, lhs.clone() $op rhs.clone());
+                assert_eq!(expected, lhs.clone() $op udcn![stringify!($rhs)]);
+                assert_eq!(expected, udcn![stringify!($lhs)] $op rhs.clone());
+
+                assert_eq!(expected, lhs $op rhs);
             }
         };
         (u8 $test_name:ident : $expected:tt = $lhs:tt $op:tt $rhs:expr) => {
