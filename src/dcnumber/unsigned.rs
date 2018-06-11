@@ -42,8 +42,6 @@ macro_rules! udcn {
     };
 }
 
-static_unsigned_dcnumber![ZERO; ZERO_DIGITS: [u8; 1] = [0]];
-static_unsigned_dcnumber![ONE; ONE_DIGITS: [u8; 1] = [1]];
 static_unsigned_dcnumber![MAX_U64; MAX_U64_DIGITS: [u8; 20] = [1,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5]];
 static_unsigned_dcnumber![MAX_I64; MAX_I64_DIGITS: [u8; 19] = [9,2,2,3,3,7,2,0,3,6,8,5,4,7,7,5,8,0,7]];
 
@@ -368,13 +366,13 @@ mod small_ints {
     }
 
     #[inline(always)]
-    pub fn zero_ref(n: u8) -> &'static UnsignedDCNumber<'static> {
+    pub fn zero_ref() -> &'static UnsignedDCNumber<'static> {
         get_ref(0)
     }
 
     #[inline(always)]
-    pub fn one_ref(n: u8) -> &'static UnsignedDCNumber<'static> {
-        get_ref(0)
+    pub fn one_ref() -> &'static UnsignedDCNumber<'static> {
+        get_ref(1)
     }
 
     #[inline(always)]
@@ -779,6 +777,7 @@ impl<'a> DCNumberAlignment<'a> {
         }
     }
 
+    #[cfg(test)]
     fn with_unsigned_dcnumbers<'lhs: 'a, 'rhs: 'a>(lhs: &'lhs UnsignedDCNumber<'lhs>, rhs: &'rhs UnsignedDCNumber<'rhs>) -> DCNumberAlignment<'a> {
         DCNumberAlignment::with_dcnumbers_parts(
             lhs.digits.as_ref(), lhs.separator,
@@ -793,7 +792,7 @@ impl<'a> DCNumberAlignment<'a> {
 
 impl<'a> Default for UnsignedDCNumber<'a> {
     fn default() -> Self {
-        ZERO.dup()
+        small_ints::zero()
     }
 }
 
@@ -910,7 +909,7 @@ impl<'a> num::Zero for UnsignedDCNumber<'a> {
     }
 
     fn is_zero(&self) -> bool {
-        if self == &ZERO {
+        if self == small_ints::zero_ref() {
             true
         } else {
             false
@@ -924,7 +923,7 @@ impl<'a> num::One for UnsignedDCNumber<'a> {
     }
 
     fn is_one(&self) -> bool where Self: PartialEq {
-        if self == &ONE {
+        if self == small_ints::one_ref() {
             true
         } else {
             false
@@ -1348,19 +1347,27 @@ impl<'a> FromStr for UnsignedDCNumber<'a> {
 mod tests {
     use super::*;
 
+    macro_rules! zero_literal {
+        () => (UnsignedDCNumber{digits: [0].as_ref().into(), separator: 1});
+    }
+
+    macro_rules! one_literal {
+        () => (UnsignedDCNumber{digits: [1].as_ref().into(), separator: 1});
+    }
+
     #[test]
     fn test_default() {
-        assert_eq!(ZERO, UnsignedDCNumber::default());
+        assert_eq!(UnsignedDCNumber{digits: [0].as_ref().into(), separator: 1}, UnsignedDCNumber::default());
     }
 
     #[test]
     fn test_split() {
-        assert_eq!(([0 as u8].as_ref(), [].as_ref()), ZERO.split());
+        assert_eq!(([0 as u8].as_ref(), [].as_ref()), small_ints::zero().split());
     }
 
     #[test]
     fn test_split1() {
-        assert_eq!(([1 as u8].as_ref(), [].as_ref()), ONE.split());
+        assert_eq!(([1 as u8].as_ref(), [].as_ref()), one_literal!().split());
     }
 
     #[test]
@@ -1660,23 +1667,23 @@ mod tests {
 
     #[test]
     fn test_cmp_unsigned() {
-        assert_eq!(Ordering::Equal, ZERO.cmp_unsigned(&ZERO));
-        assert_eq!(Ordering::Less, ZERO.cmp_unsigned(&ONE));
-        assert_eq!(Ordering::Greater, ONE.cmp_unsigned(&ZERO));
-        assert_eq!(Ordering::Equal, ONE.cmp_unsigned(&ONE));
+        assert_eq!(Ordering::Equal, zero_literal!().cmp_unsigned(&zero_literal!()));
+        assert_eq!(Ordering::Less, zero_literal!().cmp_unsigned(&one_literal!()));
+        assert_eq!(Ordering::Greater, one_literal!().cmp_unsigned(&zero_literal!()));
+        assert_eq!(Ordering::Equal, one_literal!().cmp_unsigned(&one_literal!()));
     }
 
     #[test]
     fn test_eq() {
-        assert_eq!(ZERO, ZERO);
-        assert_eq!(ONE, ONE)
+        assert_eq!(zero_literal!(), zero_literal!());
+        assert_eq!(one_literal!(), one_literal!())
     }
 
     #[test]
     fn test_partial_order() {
-        assert_eq!(Some(Ordering::Less), ZERO.partial_cmp(&ONE));
-        assert_eq!(Some(Ordering::Greater), ONE.partial_cmp(&ZERO));
-        assert_eq!(Some(Ordering::Equal), ZERO.partial_cmp(&ZERO));
+        assert_eq!(Some(Ordering::Less), zero_literal!().partial_cmp(&one_literal!()));
+        assert_eq!(Some(Ordering::Greater), one_literal!().partial_cmp(&zero_literal!()));
+        assert_eq!(Some(Ordering::Equal), zero_literal!().partial_cmp(&zero_literal!()));
         assert_eq!(
             Some(Ordering::Less),
             UnsignedDCNumber::from(213 as u32)
@@ -1686,13 +1693,13 @@ mod tests {
 
     #[test]
     fn test_order() {
-        assert!(ZERO < ONE);
+        assert!(zero_literal!() < one_literal!());
     }
 
     #[test]
     fn test_to_primitive() {
-        assert_eq!(0, ZERO.to_u64().expect("u64 zero"));
-        assert_eq!(1, ONE.to_u64().expect("u64 one"));
+        assert_eq!(0, zero_literal!().to_u64().expect("u64 zero_literal!()"));
+        assert_eq!(1, one_literal!().to_u64().expect("u64 one"));
         assert_eq!(::std::u64::MAX, MAX_U64.to_u64().expect("u64 max_u64"));
         assert_eq!(
             ::std::i64::MAX as u64,
@@ -1710,8 +1717,8 @@ mod tests {
             MAX_I64.to_u64().expect("u64 max_i64") + 1
         );
 
-        assert_eq!(0, ZERO.to_i64().expect("i64 zero"));
-        assert_eq!(1, ONE.to_i64().expect("i64 one"));
+        assert_eq!(0, zero_literal!().to_i64().expect("i64 zero"));
+        assert_eq!(1, one_literal!().to_i64().expect("i64 one"));
         assert_eq!(None, MAX_U64.to_i64());
         assert_eq!(::std::i64::MAX, MAX_I64.to_i64().expect("i64 max_i64"));
         assert_eq!(
@@ -1847,7 +1854,7 @@ mod tests {
     #[test]
     fn test_from_u64_zero() {
         let zero = UnsignedDCNumber::from(0 as u64);
-        assert_eq!(ZERO, zero);
+        assert_eq!(zero_literal!(), zero);
     }
 
     #[test]
@@ -1859,7 +1866,7 @@ mod tests {
     #[test]
     fn test_from_u64_one() {
         let one = UnsignedDCNumber::from(1 as u64);
-        assert_eq!(ONE, one);
+        assert_eq!(one_literal!(), one);
     }
 
     #[test]
@@ -2016,8 +2023,8 @@ mod tests {
         };
     }
 
-    test_from_bytes![from_str_zero: ZERO ; 0];
-    test_from_bytes![from_str_one:  ONE ; 1];
+    test_from_bytes![from_str_zero: zero_literal!() ; 0];
+    test_from_bytes![from_str_one:  one_literal!() ; 1];
     test_from_bytes![from_str_10: UnsignedDCNumber::new([1, 0].as_ref(), 2) ; 10];
     test_from_bytes![from_str_byte_spec: UnsignedDCNumber::new([1, 1].as_ref(), 1) ; 1.1];
     test_from_bytes![from_str_0dot9: UnsignedDCNumber::new([0, 9].as_ref(), 1) ; 0.9];
@@ -2170,8 +2177,8 @@ mod tests {
         use num::Zero;
         use num::One;
 
-        assert_eq!(ZERO, UnsignedDCNumber::zero());
-        assert_eq!(ONE, UnsignedDCNumber::one());
+        assert_eq!(zero_literal!(), UnsignedDCNumber::zero());
+        assert_eq!(one_literal!(), UnsignedDCNumber::one());
         assert!(UnsignedDCNumber::zero().is_zero());
         assert!(!UnsignedDCNumber::one().is_zero());
         assert!(!UnsignedDCNumber::zero().is_one());
