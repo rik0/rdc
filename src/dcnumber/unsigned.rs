@@ -1797,8 +1797,8 @@ mod tests {
                 assert_eq!(expected, lhs.dup() $op rhs.dup(), "dup dup");
 //                assert_eq!(expected, lhs.dup() $op  small_ints::interned($lhs), "dup -");
 //                assert_eq!(expected, small_ints::interned($rhs) $op rhs.dup(), "- dup");
-//
-//                assert_eq!(expected, lhs $op rhs, "- -");
+
+                assert_eq!(expected, lhs $op rhs, "- -");
             }
         };
         (u8 $test_name:ident : $expected:tt = $lhs:tt $op:tt $rhs:expr) => {
