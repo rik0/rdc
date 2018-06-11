@@ -722,73 +722,6 @@ fn inner_add_digits_allocate<'a, 'b>(lhs: &[u8], lhs_separator: usize, rhs: &[u8
     UnsignedDCNumber::new(digits, separator)
 }
 
-struct DCNumberAlignment<'a> {
-    leading_digits: &'a [u8],
-    aligned_part: &'a [u8],
-    second_aligned_part: &'a [u8],
-    fractional_tail: &'a [u8],
-}
-
-impl<'a> DCNumberAlignment<'a> {
-    fn with_dcnumbers_parts<'lhs: 'a, 'rhs: 'a>(lhs_digits: &'lhs [u8], lhs_separator: usize, rhs_digits: &'rhs [u8], rhs_separator: usize) -> DCNumberAlignment<'a> {
-        let lhs_fractional_digits = lhs_digits.len() - lhs_separator;
-        let rhs_fractional_digits = rhs_digits.len() - rhs_separator;
-
-        let leading_digits;
-        let right_aligned_part;
-        let fractional_tail;
-        let aligned_part;
-        let second_right_aligned_part: &[u8];
-        let second_aligned_part: &[u8];
-
-        if lhs_fractional_digits > rhs_fractional_digits {
-            let offset = lhs_fractional_digits - rhs_fractional_digits;
-            let (front, tail) = lhs_digits.split_at(lhs_digits.len() - offset);
-            right_aligned_part = front;
-            fractional_tail = tail;
-            second_right_aligned_part = &rhs_digits;
-        } else {
-            let offset = rhs_fractional_digits - lhs_fractional_digits;
-            let (front, tail) = rhs_digits.split_at(rhs_digits.len() - offset);
-            right_aligned_part = front;
-            fractional_tail = tail;
-            second_right_aligned_part = &lhs_digits;
-        }
-
-        if right_aligned_part.len() > second_right_aligned_part.len() {
-            let offset = right_aligned_part.len() - second_right_aligned_part.len();
-            let (front, tail) = right_aligned_part.split_at(offset);
-            aligned_part = tail;
-            leading_digits = front;
-            second_aligned_part = second_right_aligned_part;
-        } else {
-            let offset = second_right_aligned_part.len() - right_aligned_part.len();
-            let (front, tail) = second_right_aligned_part.split_at(offset);
-            aligned_part = tail;
-            leading_digits = front;
-            second_aligned_part = right_aligned_part;
-        }
-
-        DCNumberAlignment {
-            leading_digits,
-            aligned_part,
-            second_aligned_part,
-            fractional_tail,
-        }
-    }
-
-    #[cfg(test)]
-    fn with_unsigned_dcnumbers<'lhs: 'a, 'rhs: 'a>(lhs: &'lhs UnsignedDCNumber<'lhs>, rhs: &'rhs UnsignedDCNumber<'rhs>) -> DCNumberAlignment<'a> {
-        DCNumberAlignment::with_dcnumbers_parts(
-            lhs.digits.as_ref(), lhs.separator,
-            rhs.digits.as_ref(), rhs.separator,
-        )
-    }
-
-    fn len(&self) -> usize {
-        self.fractional_tail.len() + self.aligned_part.len() + self.leading_digits.len()
-    }
-}
 
 impl<'a> Default for UnsignedDCNumber<'a> {
     fn default() -> Self {
@@ -1343,6 +1276,76 @@ impl<'a> FromStr for UnsignedDCNumber<'a> {
     }
 }
 
+
+
+struct DCNumberAlignment<'a> {
+    leading_digits: &'a [u8],
+    aligned_part: &'a [u8],
+    second_aligned_part: &'a [u8],
+    fractional_tail: &'a [u8],
+}
+
+impl<'a> DCNumberAlignment<'a> {
+    fn with_dcnumbers_parts<'lhs: 'a, 'rhs: 'a>(lhs_digits: &'lhs [u8], lhs_separator: usize, rhs_digits: &'rhs [u8], rhs_separator: usize) -> DCNumberAlignment<'a> {
+        let lhs_fractional_digits = lhs_digits.len() - lhs_separator;
+        let rhs_fractional_digits = rhs_digits.len() - rhs_separator;
+
+        let leading_digits;
+        let right_aligned_part;
+        let fractional_tail;
+        let aligned_part;
+        let second_right_aligned_part: &[u8];
+        let second_aligned_part: &[u8];
+
+        if lhs_fractional_digits > rhs_fractional_digits {
+            let offset = lhs_fractional_digits - rhs_fractional_digits;
+            let (front, tail) = lhs_digits.split_at(lhs_digits.len() - offset);
+            right_aligned_part = front;
+            fractional_tail = tail;
+            second_right_aligned_part = &rhs_digits;
+        } else {
+            let offset = rhs_fractional_digits - lhs_fractional_digits;
+            let (front, tail) = rhs_digits.split_at(rhs_digits.len() - offset);
+            right_aligned_part = front;
+            fractional_tail = tail;
+            second_right_aligned_part = &lhs_digits;
+        }
+
+        if right_aligned_part.len() > second_right_aligned_part.len() {
+            let offset = right_aligned_part.len() - second_right_aligned_part.len();
+            let (front, tail) = right_aligned_part.split_at(offset);
+            aligned_part = tail;
+            leading_digits = front;
+            second_aligned_part = second_right_aligned_part;
+        } else {
+            let offset = second_right_aligned_part.len() - right_aligned_part.len();
+            let (front, tail) = second_right_aligned_part.split_at(offset);
+            aligned_part = tail;
+            leading_digits = front;
+            second_aligned_part = right_aligned_part;
+        }
+
+        DCNumberAlignment {
+            leading_digits,
+            aligned_part,
+            second_aligned_part,
+            fractional_tail,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_unsigned_dcnumbers<'lhs: 'a, 'rhs: 'a>(lhs: &'lhs UnsignedDCNumber<'lhs>, rhs: &'rhs UnsignedDCNumber<'rhs>) -> DCNumberAlignment<'a> {
+        DCNumberAlignment::with_dcnumbers_parts(
+            lhs.digits.as_ref(), lhs.separator,
+            rhs.digits.as_ref(), rhs.separator,
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.fractional_tail.len() + self.aligned_part.len() + self.leading_digits.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1783,37 +1786,61 @@ mod tests {
                 assert_eq!(expected, lhs $op rhs);
             }
         };
+       (borrowed $test_name:ident : $expected:tt = $lhs:tt $op:tt $rhs:tt) => {
+            #[test]
+            fn $test_name() {
+                use super::small_ints;
+                let expected = udcn![stringify!($expected)];
+                let lhs: UnsignedDCNumber = small_ints::interned($lhs);
+                let rhs: UnsignedDCNumber = small_ints::interned($rhs);
+
+                assert_eq!(expected, lhs.dup() $op rhs.dup(), "dup dup");
+//                assert_eq!(expected, lhs.dup() $op  small_ints::interned($lhs), "dup -");
+//                assert_eq!(expected, small_ints::interned($rhs) $op rhs.dup(), "- dup");
+//
+//                assert_eq!(expected, lhs $op rhs, "- -");
+            }
+        };
         (u8 $test_name:ident : $expected:tt = $lhs:tt $op:tt $rhs:expr) => {
             #[test]
             fn $test_name() {
                 assert_eq!(
-                                            udcn![stringify!($expected)],
-                                            udcn![stringify!($lhs)] $op $rhs as u8,
-                                        );
+                    udcn![stringify!($expected)],
+                    udcn![stringify!($lhs)] $op $rhs as u8,
+                );
             }
         };
     }
 
-    test_binop![test_add_zero: 0 = 0 + 0];
-    test_binop![test_add_unit: 1 = 1 + 0];
-    test_binop![test_add_unit2: 1 = 0 + 1];
-    test_binop![test_integers: 1026 = 520 + 506];
-    test_binop![test_add_frac: 20.2 = 10.1 + 10.1];
-    test_binop![test_add_f:10143.043 = 7221.123 + 2921.92];
-    test_binop![test_add_f1:20143.043 = 17221.123 + 2921.92];
-    test_binop![test_add_f2:20143.043 = 7221.123 + 12921.92];
-    test_binop![test_add_f3:110143.043 = 107221.123 + 2921.92];
-    test_binop![test_add_f4:110143.043 = 7221.123 + 102921.92];
-    test_binop![test_add_le:10.1 = 9.9 + 0.2];
-    test_binop![test_add_le2:10.12 = 9.9 + 0.22];
-    test_binop![test_add_le3:10.12 = 9.92 + 0.2];
-    test_binop![test_add_le4:10.12 = 0.92 + 9.2];
-    test_binop![test_add_le5:1000.12 = 990.92 + 9.2];
-    test_binop![test_add_le6:1000.12 = 999.92 + 0.2];
-    test_binop![test_add_le7:1000.12 = 9.2 + 990.92];
-    test_binop![test_add_le8:1000.12 = 0.2 + 999.92];
-    test_binop![u8 test_add_zero_u8: 0 = 0 + 0];
-    test_binop![u8 test_add_unit_u8: 1 = 0 + 1];
+    test_binop![add_zero: 0 = 0 + 0];
+    test_binop![add_unit: 1 = 1 + 0];
+    test_binop![add_two: 2 = 2 + 0];
+    test_binop![add_unit2: 1 = 1 + 0];
+    test_binop![add_units: 2 = 1 + 1];
+    test_binop![add_to_three: 10 = 3 + 7];
+    test_binop![add_seven: 7 = 0 + 7];
+    test_binop![integers: 1026 = 520 + 506];
+    test_binop![add_frac: 20.2 = 10.1 + 10.1];
+    test_binop![add_f:10143.043 = 7221.123 + 2921.92];
+    test_binop![add_f1:20143.043 = 17221.123 + 2921.92];
+    test_binop![add_f2:20143.043 = 7221.123 + 12921.92];
+    test_binop![add_f3:110143.043 = 107221.123 + 2921.92];
+    test_binop![add_f4:110143.043 = 7221.123 + 102921.92];
+    test_binop![add_le:10.1 = 9.9 + 0.2];
+    test_binop![add_le2:10.12 = 9.9 + 0.22];
+    test_binop![add_le3:10.12 = 9.92 + 0.2];
+    test_binop![add_le4:10.12 = 0.92 + 9.2];
+    test_binop![add_le5:1000.12 = 990.92 + 9.2];
+    test_binop![add_le6:1000.12 = 999.92 + 0.2];
+    test_binop![add_le7:1000.12 = 9.2 + 990.92];
+    test_binop![add_le8:1000.12 = 0.2 + 999.92];
+    test_binop![u8 add_zero_u8: 0 = 0 + 0];
+    test_binop![u8 add_unit_u8: 1 = 0 + 1];
+
+    test_binop![borrowed badd_zero: 0 = 0 + 0];
+    test_binop![borrowed badd_unit: 1 = 1 + 0];
+    test_binop![borrowed badd_unit2: 1 = 0 + 1];
+    test_binop![borrowed bborroweds: 254 = 127 + 127 ];
 
     mod mul {
         use super::*;
