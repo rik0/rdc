@@ -1,12 +1,20 @@
+#![cfg_attr(all(feature = "nightly", test), feature(test))]
+
+#[cfg(all(feature = "nightly", test))]
+extern crate test;
+
 extern crate bigdecimal;
 extern crate num;
 extern crate num_bigint;
 
+#[macro_use] mod error_type;
+
 mod instructions;
 mod parse;
-#[macro_use]
-mod dcstack;
+#[macro_use] mod dcstack;
 pub mod vm;
+pub mod dcnumber;
+
 
 use std::io::Write;
 use std::path::Path;
