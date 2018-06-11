@@ -903,7 +903,7 @@ impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
 
 // TODO consider if implementing Add<&> allows us faster
 
-impl<'a> num::Zero for UnsignedDCNumber<'a> {
+impl<'a> num::Zero for UnsignedDCNumber<'static> {
     fn zero() -> Self {
         small_ints::zero()
     }
@@ -917,7 +917,7 @@ impl<'a> num::Zero for UnsignedDCNumber<'a> {
     }
 }
 
-impl<'a> num::One for UnsignedDCNumber<'a> {
+impl<'a> num::One for UnsignedDCNumber<'static> {
     fn one() -> Self {
         small_ints::one()
     }
@@ -1013,7 +1013,7 @@ macro_rules! impl_from_unsigned_primitive {
 /// assert_eq!(UnsignedDCNumber::from_str("255").unwrap(), UnsignedDCNumber::from(255 as u8));
 /// ```
 ///
-impl<'a> From<u8> for UnsignedDCNumber<'a> {
+impl<'a> From<u8> for UnsignedDCNumber<'static> {
     fn from(n: u8) -> Self {
         small_ints::interned(n)
     }
