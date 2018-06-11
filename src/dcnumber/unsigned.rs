@@ -14,7 +14,7 @@ use super::error::ParseDCNumberError;
 use super::traits::FromBytes;
 use std::ops::Sub;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct UnsignedDCNumber<'a> {
     // TODO: maybe use nibble?
     // digits are in BigEndian
@@ -355,12 +355,36 @@ mod small_ints {
         &N249, &N250, &N251, &N252, &N253, &N254, &N255,
     ];
 
-    pub fn interned<'a>(n: u8) -> UnsignedDCNumber<'static> {
+    #[inline(always)]
+    pub fn interned(n: u8) -> UnsignedDCNumber<'static> {
+        get_ref(n).dup()
+    }
+
+    #[inline(always)]
+    pub fn get_ref(n: u8) -> &'static UnsignedDCNumber<'static> {
         unsafe {
-            //            debug_assert!(u8::max_value() as usize <= SMALL_INTS.len());
-            let r = *SMALL_INTS.get_unchecked(n as usize);
-            r.clone()
+            SMALL_INTS.get_unchecked(n as usize)
         }
+    }
+
+    #[inline(always)]
+    pub fn zero_ref(n: u8) -> &'static UnsignedDCNumber<'static> {
+        get_ref(0)
+    }
+
+    #[inline(always)]
+    pub fn one_ref(n: u8) -> &'static UnsignedDCNumber<'static> {
+        get_ref(0)
+    }
+
+    #[inline(always)]
+    pub fn zero() -> UnsignedDCNumber<'static> {
+        interned(0)
+    }
+
+    #[inline(always)]
+    pub fn one() -> UnsignedDCNumber<'static> {
+        interned(1)
     }
 }
 
@@ -490,6 +514,19 @@ impl<'a> UnsignedDCNumber<'a> {
                 }
             }
         }
+    }
+
+
+    pub fn dup(&self) -> UnsignedDCNumber<'a> {
+        use std::borrow::Borrow;
+//        UnsignedDCNumber{digits: Cow::Borrowed(self.digits.borrow()), separator: self.separator}
+        // TODO inefficient!
+        // TODO one option would be to make sure that this only gives stuff with 'static
+        // maybe we can put it in a trait and implement it only for static
+        // another option is to start using Rc and similar stuff in some combination with Cow
+        // or in isolation... Cow does not really seem to have the right semantics here, we do not
+        // really want to "mutate" existing instances, we always create new stuff...
+        UnsignedDCNumber::new(self.digits.clone(), self.separator)
     }
 
 
@@ -756,7 +793,7 @@ impl<'a> DCNumberAlignment<'a> {
 
 impl<'a> Default for UnsignedDCNumber<'a> {
     fn default() -> Self {
-        ZERO.clone()
+        ZERO.dup()
     }
 }
 
@@ -765,6 +802,7 @@ impl<'a> PartialEq for UnsignedDCNumber<'a> {
         self.cmp_unsigned(other) == Ordering::Equal
     }
 }
+
 
 impl<'a> Eq for UnsignedDCNumber<'a> {}
 
@@ -868,7 +906,7 @@ impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
 
 impl<'a> num::Zero for UnsignedDCNumber<'a> {
     fn zero() -> Self {
-        ZERO.clone()
+        small_ints::zero()
     }
 
     fn is_zero(&self) -> bool {
@@ -882,7 +920,7 @@ impl<'a> num::Zero for UnsignedDCNumber<'a> {
 
 impl<'a> num::One for UnsignedDCNumber<'a> {
     fn one() -> Self {
-        ONE.clone()
+        small_ints::one()
     }
 
     fn is_one(&self) -> bool where Self: PartialEq {
@@ -921,14 +959,6 @@ fn decimal_digits(n: u64) -> u32 {
 
 macro_rules! impl_from_unsigned_primitive_u8 {
     ($u:ty) => {
-        impl<'a> Add<$u> for UnsignedDCNumber<'a> {
-            type Output = UnsignedDCNumber<'a>;
-
-            fn add(self, other: $u) -> Self::Output {
-                // TODO make this more efficient by implementing Add "in place"
-                self + UnsignedDCNumber::from(other)
-            }
-        }
     };
 }
 
@@ -956,6 +986,15 @@ macro_rules! impl_from_unsigned_primitive {
             }
         }
 
+        impl<'a> Add<$u> for UnsignedDCNumber<'a> {
+            type Output = UnsignedDCNumber<'a>;
+
+            fn add(self, other: $u) -> Self::Output {
+                // TODO make this more efficient by implementing Add "in place"
+                self + UnsignedDCNumber::from(other)
+            }
+        }
+
         impl_from_unsigned_primitive_u8!($u);
     };
 }
@@ -978,6 +1017,14 @@ macro_rules! impl_from_unsigned_primitive {
 impl<'a> From<u8> for UnsignedDCNumber<'a> {
     fn from(n: u8) -> Self {
         small_ints::interned(n)
+    }
+}
+
+impl<'a> Add<u8> for UnsignedDCNumber<'a> {
+    type Output = UnsignedDCNumber<'a>;
+
+    fn add(self, other: u8) -> Self::Output {
+        self + small_ints::interned(other)
     }
 }
 
@@ -1090,7 +1137,7 @@ impl_from_unsigned_primitive![u32];
 impl_from_unsigned_primitive![u64];
 
 mod radix_converters {
-    use super::{ParseDCNumberError, UnsignedDCNumber, ZERO};
+    use super::{ParseDCNumberError, UnsignedDCNumber, small_ints};
 
     pub trait AsciiConverter {
         fn convert_bytes<'a, 'b>(
@@ -1186,7 +1233,7 @@ mod radix_converters {
             bytes: &'a [u8],
         ) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
             let radix = self.radix;
-            bytes.iter().fold(Ok(ZERO.clone()), |acc, &ch| {
+            bytes.iter().fold(Ok(small_ints::zero()), |acc, &ch| {
                 acc.and_then(|n| {
                     UnsignedDCNumber::from_byte_radix_u8(ch, radix)
                         .and_then(|m| Ok(m + (n * radix)))
@@ -1722,9 +1769,9 @@ mod tests {
                 let lhs = udcn![stringify!($lhs)];
                 let rhs = udcn![stringify!($rhs)];
 
-                assert_eq!(expected, lhs.clone() $op rhs.clone());
-                assert_eq!(expected, lhs.clone() $op udcn![stringify!($rhs)]);
-                assert_eq!(expected, udcn![stringify!($lhs)] $op rhs.clone());
+                assert_eq!(expected, lhs.dup() $op rhs.dup());
+                assert_eq!(expected, lhs.dup() $op udcn![stringify!($rhs)]);
+                assert_eq!(expected, udcn![stringify!($lhs)] $op rhs.dup());
 
                 assert_eq!(expected, lhs $op rhs);
             }
