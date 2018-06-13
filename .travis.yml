@@ -17,7 +17,6 @@ script:
 - cargo clean
 - cargo build
 - cargo test
-- [[ "$TRAVIS_RUST_VERSION" == "nightly" ]] && cargo bench
 after_success: |
   if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
     bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
