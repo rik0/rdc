@@ -2033,6 +2033,14 @@ mod tests {
                 }
 
                 #[bench]
+                fn test_from_bytes_radix_16(b: &mut Bencher) {
+                    b.iter(|| {
+                        UnsignedDCNumber::from_bytes_radix($digits.as_ref(), 16)
+                            .expect(stringify!($digits))
+                    });
+                }
+
+                #[bench]
                 fn test_from_str(b: &mut Bencher) {
                     b.iter(|| {
                         UnsignedDCNumber::from_str($digits.as_ref()).expect(stringify!($digits))
