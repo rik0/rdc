@@ -13,7 +13,7 @@ mod instructions;
 mod parse;
 #[macro_use] mod dcstack;
 pub mod vm;
-pub mod dcnumber;
+#[macro_use] pub mod dcnumber;
 
 
 use std::io::Write;

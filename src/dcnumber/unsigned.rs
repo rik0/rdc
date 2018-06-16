@@ -1,5 +1,4 @@
 use num::{self, ToPrimitive};
-use std::borrow::Cow;
 use std::cmp::{max, Ordering};
 use std::collections::VecDeque;
 use std::f32;
@@ -7,18 +6,21 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::iter::{self, Iterator};
-use std::ops::{Add, Mul, Range};
+use std::ops::{Add, Mul, Sub, Range};
 use std::str::FromStr;
 
-use super::error::ParseDCNumberError;
-use super::traits::FromBytes;
-use std::ops::Sub;
+use dcnumber::digits_type::{DigitsType};
+use dcnumber::error::ParseDCNumberError;
+use dcnumber::traits::FromBytes;
+
+
+
 
 #[derive(Debug)]
-pub struct UnsignedDCNumber<'a> {
+pub struct UnsignedDCNumber {
     // TODO: maybe use nibble?
     // digits are in BigEndian
-    digits: Cow<'a, [u8]>,
+    digits: DigitsType,
     // also consider having a pool for these numbers for memory locality
     separator: usize,
 }
@@ -29,7 +31,7 @@ macro_rules! static_unsigned_dcnumber {
         const $digits_name: $digits_type = $digits;
         #[allow(dead_code)]
         static $dcnumber_name: UnsignedDCNumber = UnsignedDCNumber {
-            digits: Cow::Borrowed(&$digits_name),
+            digits: DigitsType::Ref(&$digits),
             separator: ::std::mem::size_of::<$digits_type>(),
         };
     };
@@ -42,8 +44,26 @@ macro_rules! udcn {
     };
 }
 
+unsafe impl Sync for UnsignedDCNumber {
+
+}
+
+
+
 static_unsigned_dcnumber![MAX_U64; MAX_U64_DIGITS: [u8; 20] = [1,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5]];
 static_unsigned_dcnumber![MAX_I64; MAX_I64_DIGITS: [u8; 19] = [9,2,2,3,3,7,2,0,3,6,8,5,4,7,7,5,8,0,7]];
+
+//lazy_static!{
+//    static ref MAX_U64: UnsignedDCNumber = {
+//        UnsignedDCNumber::new(vec![1u8,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5], 20)
+//    };
+//}
+//
+//lazy_static!{
+//    static ref MAX_I64: UnsignedDCNumber = {
+//        UnsignedDCNumber::new(vec![1u8,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5], 19)
+//    };
+//}
 
 mod small_ints {
     use super::*;
@@ -354,44 +374,44 @@ mod small_ints {
     ];
 
     #[inline(always)]
-    pub fn interned(n: u8) -> UnsignedDCNumber<'static> {
+    pub fn interned(n: u8) -> UnsignedDCNumber {
         get_ref(n).dup()
     }
 
     #[inline(always)]
-    pub fn get_ref(n: u8) -> &'static UnsignedDCNumber<'static> {
+    pub fn get_ref(n: u8) -> &'static UnsignedDCNumber {
         unsafe {
             SMALL_INTS.get_unchecked(n as usize)
         }
     }
 
     #[inline(always)]
-    pub fn zero_ref() -> &'static UnsignedDCNumber<'static> {
+    pub fn zero_ref() -> &'static UnsignedDCNumber {
         get_ref(0)
     }
 
     #[inline(always)]
-    pub fn one_ref() -> &'static UnsignedDCNumber<'static> {
+    pub fn one_ref() -> &'static UnsignedDCNumber {
         get_ref(1)
     }
 
     #[inline(always)]
-    pub fn zero() -> UnsignedDCNumber<'static> {
+    pub fn zero() -> UnsignedDCNumber {
         interned(0)
     }
 
     #[inline(always)]
-    pub fn one() -> UnsignedDCNumber<'static> {
+    pub fn one() -> UnsignedDCNumber {
         interned(1)
     }
 }
 
-impl<'a> UnsignedDCNumber<'a> {
+impl UnsignedDCNumber {
     pub fn new<T>(digits: T, last_integer: usize) -> Self
     where
-        Cow<'a, [u8]>: From<T>,
+        DigitsType: From<T>,
     {
-        let v: Cow<[u8]> = digits.into();
+        let v: DigitsType = digits.into();
         debug_assert!(
             last_integer <= v.len(),
             "separator {} should be less than {}: v{:?}",
@@ -408,9 +428,9 @@ impl<'a> UnsignedDCNumber<'a> {
 
     pub fn with_integer_digits<T>(digits: T) -> Self
     where
-        Cow<'a, [u8]>: From<T>,
+        DigitsType: From<T>,
     {
-        let digits: Cow<'a, [u8]> = digits.into();
+        let digits: DigitsType = digits.into();
         let size = digits.len();
         UnsignedDCNumber {
             digits,
@@ -496,7 +516,7 @@ impl<'a> UnsignedDCNumber<'a> {
             .fold(0, |acc, d| acc * 10 + d as u64)
     }
 
-    fn cmp_unsigned<'b>(&self, other: &UnsignedDCNumber<'b>) -> Ordering {
+    fn cmp_unsigned(&self, other: &UnsignedDCNumber) -> Ordering {
         let self_integer = self.integer_magnitude();
         let other_integer = other.integer_magnitude();
         match self_integer.cmp(&other_integer) {
@@ -514,9 +534,13 @@ impl<'a> UnsignedDCNumber<'a> {
         }
     }
 
+    fn into_parts(self)  -> (Vec<u8>, usize) {
+        let separator = self.separator;
+        (self.digits.into_vec(), separator)
+    }
 
-    pub fn dup(&self) -> UnsignedDCNumber<'a> {
-        use std::borrow::Borrow;
+
+    pub fn dup(&self) -> UnsignedDCNumber {
 //        UnsignedDCNumber{digits: Cow::Borrowed(self.digits.borrow()), separator: self.separator}
         // TODO inefficient!
         // TODO one option would be to make sure that this only gives stuff with 'static
@@ -524,40 +548,32 @@ impl<'a> UnsignedDCNumber<'a> {
         // another option is to start using Rc and similar stuff in some combination with Cow
         // or in isolation... Cow does not really seem to have the right semantics here, we do not
         // really want to "mutate" existing instances, we always create new stuff...
-        UnsignedDCNumber::new(self.digits.clone(), self.separator)
+        UnsignedDCNumber{digits: self.digits.clone(), separator: self.separator}
     }
 
 
-    fn inner_add(self, other: UnsignedDCNumber<'a>) -> Self {
+    fn inner_add(self, other: UnsignedDCNumber) -> Self {
         let UnsignedDCNumber { digits: self_digits, separator: self_separator } = self;
-        let UnsignedDCNumber { digits: other_digits, separator: other_separator } = other;
 
-        match (self_digits, other_digits) {
-            (Cow::Owned(self_digits), Cow::Owned(other_digits)) => {
-                if self_digits.len() > other_digits.len() {
-                    inner_add_digits_ref(self_digits, self_separator, &other_digits, other_separator)
-                } else {
-                    inner_add_digits_ref(other_digits, other_separator, &self_digits, self_separator)
-                }
-            },
-            (Cow::Borrowed(self_digits), Cow::Owned(other_digits)) => {
-                inner_add_digits_ref(other_digits, other_separator, &self_digits, self_separator)
-            },
-            (Cow::Owned(self_digits), Cow::Borrowed(other_digits)) => {
-                inner_add_digits_ref(self_digits, self_separator, &other_digits, other_separator)
-            },
-            (Cow::Borrowed(self_digits), Cow::Borrowed(other_digits)) => {
-                // this could operate only with references and copy data somewhere else, which
-                // is essentially the algorithm we implemented for add. An allocation is necessary anyways
-                inner_add_digits_allocate(self_digits, self_separator, other_digits, other_separator)
+        if !self_digits.holds_memory() {
+            if self_digits.len() >= other.digits.len() {
+                let UnsignedDCNumber{digits: other_digits, separator: other_separator} = other;
+                let other_digits = other_digits.into_vec();
+                return inner_add_digits_ref(other_digits, other_separator, self_digits.as_ref(), self_separator);
+
             }
         }
+
+        let self_digits = self_digits.into_vec();
+
+
+        inner_add_digits_ref(self_digits, self_separator, other.digits.as_ref(), other.separator)
     }
 
 }
 
 #[inline(always)]
-fn inner_add_digits_ref<'a, 'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber<'a> {
+fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber {
     let mut carry = false;
     let mut separator = max(lhs_separator, rhs_separator);
 
@@ -615,6 +631,7 @@ fn inner_add_digits_ref<'a, 'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b
 
         lhs_aligned_index -= 1;
         rhs_aligned_index -= 1;
+
     }
 
     for index in (0..lhs_aligned_end).rev() {
@@ -631,10 +648,11 @@ fn inner_add_digits_ref<'a, 'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b
         debug_assert!(lhs[index] < 10);
     }
 
+    // TODO: bug here
     if rhs_aligned_end > 0 {
-        lhs.extend(rhs.iter()
+        lhs.extend(rhs[0..rhs_aligned_end].iter()
             .cloned()
-            .take(rhs_aligned_end)
+            .rev()
             .map(|d| {
                 let sum = if carry {
                     carry = false;
@@ -657,94 +675,34 @@ fn inner_add_digits_ref<'a, 'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b
     }
 
     if rhs_fractional_digits > lhs_fractional_digits {
-        lhs.extend(&rhs[rhs.len() - (rhs_fractional_digits - lhs_fractional_digits)..rhs.len()])
+        lhs.extend(&rhs[rhs.len() - (rhs_fractional_digits - lhs_fractional_digits)..rhs.len()]);
     }
 
     UnsignedDCNumber::new(lhs, separator)
 }
 
-
-fn inner_add_digits_allocate<'a, 'b>(lhs: &[u8], lhs_separator: usize, rhs: &[u8], rhs_separator: usize) -> UnsignedDCNumber<'a> {
-    let mut separator = max(lhs_separator, rhs_separator);
-    let alignment = DCNumberAlignment::with_dcnumbers_parts(&lhs, lhs_separator, &rhs, rhs_separator);
-    let DCNumberAlignment {
-        leading_digits,
-        aligned_part,
-        second_aligned_part,
-        fractional_tail,
-    } = alignment;
-
-    let mut carry = false;
-    let mut digits: Vec<u8> = Vec::with_capacity(alignment.len() + 1);
-
-    digits.extend(fractional_tail.iter().rev());
-    for (lhs, rhs) in aligned_part
-        .iter()
-        .rev()
-        .cloned()
-        .zip(second_aligned_part.iter().rev().cloned())
-        {
-            debug_assert!(lhs < 10);
-            debug_assert!(rhs < 10);
-            let sum = if carry {
-                carry = false;
-                lhs + rhs + 1 // no risk of overflow, both < 10
-            } else {
-                lhs + rhs
-            };
-            let mut result = sum;
-            if sum >= 10 {
-                carry = true;
-                result -= 10;
-            }
-            digits.push(result);
-        }
-
-    for &digit in leading_digits.iter().rev() {
-        debug_assert!(digit < 10);
-        let value = if carry { digit + 1 } else { digit };
-
-        let mut result = value;
-        if result >= 10 {
-            carry = true;
-            result -= 10;
-        }
-        digits.push(result);
-    }
-
-    if carry {
-        separator += 1;
-        digits.push(1);
-    }
-
-    digits.reverse();
-
-    UnsignedDCNumber::new(digits, separator)
-}
-
-
-impl<'a> Default for UnsignedDCNumber<'a> {
+impl Default for UnsignedDCNumber {
     fn default() -> Self {
         small_ints::zero()
     }
 }
 
-impl<'a> PartialEq for UnsignedDCNumber<'a> {
+impl PartialEq for UnsignedDCNumber {
     fn eq(&self, other: &Self) -> bool {
         self.cmp_unsigned(other) == Ordering::Equal
     }
 }
 
 
-impl<'a> Eq for UnsignedDCNumber<'a> {}
+impl Eq for UnsignedDCNumber {}
 
-impl<'a> PartialOrd for UnsignedDCNumber<'a> {
+impl PartialOrd for UnsignedDCNumber {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp_unsigned(other))
     }
 }
 
-impl<'a> Ord for UnsignedDCNumber<'a> {
+impl Ord for UnsignedDCNumber {
     fn cmp(&self, other: &Self) -> Ordering {
         self.cmp_unsigned(other)
     }
@@ -752,7 +710,7 @@ impl<'a> Ord for UnsignedDCNumber<'a> {
 
 // TODO add similar to test_partial_order for cmp as well
 
-impl<'a> ToPrimitive for UnsignedDCNumber<'a> {
+impl ToPrimitive for UnsignedDCNumber {
     fn to_i64(&self) -> Option<i64> {
         if self.fractional().iter().cloned().any(|d| d != 0) {
             return None;
@@ -778,7 +736,7 @@ impl<'a> ToPrimitive for UnsignedDCNumber<'a> {
     }
 }
 
-impl<'a> Display for UnsignedDCNumber<'a> {
+impl Display for UnsignedDCNumber {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         use std::fmt::Write;
 
@@ -808,16 +766,16 @@ macro_rules! lsd {
 
 // TODO consiider implementing *= u8; migght be the fastest option here (MulAssign)
 
-impl<'a> Mul<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
-    type Output = UnsignedDCNumber<'a>;
+impl Mul<UnsignedDCNumber> for UnsignedDCNumber {
+    type Output = UnsignedDCNumber;
 
     fn mul(self, _rhs: UnsignedDCNumber) -> Self {
         unimplemented!()
     }
 }
 
-impl<'a> Sub<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
-    type Output = UnsignedDCNumber<'a>;
+impl Sub<UnsignedDCNumber> for UnsignedDCNumber {
+    type Output = UnsignedDCNumber;
 
 
     fn sub(self, _rhs: UnsignedDCNumber) -> Self {
@@ -825,10 +783,10 @@ impl<'a> Sub<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
     }
 }
 
-impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
-    type Output = UnsignedDCNumber<'a>;
+impl Add<UnsignedDCNumber> for UnsignedDCNumber {
+    type Output = UnsignedDCNumber;
 
-    fn add<'b>(self, other: UnsignedDCNumber<'a>) -> Self {
+    fn add(self, other: UnsignedDCNumber) -> Self {
         self.inner_add(other)
     }
 }
@@ -836,7 +794,7 @@ impl<'a> Add<UnsignedDCNumber<'a>> for UnsignedDCNumber<'a> {
 
 // TODO consider if implementing Add<&> allows us faster
 
-impl<'a> num::Zero for UnsignedDCNumber<'static> {
+impl num::Zero for UnsignedDCNumber {
     fn zero() -> Self {
         small_ints::zero()
     }
@@ -850,7 +808,7 @@ impl<'a> num::Zero for UnsignedDCNumber<'static> {
     }
 }
 
-impl<'a> num::One for UnsignedDCNumber<'static> {
+impl num::One for UnsignedDCNumber {
     fn one() -> Self {
         small_ints::one()
     }
@@ -896,7 +854,7 @@ macro_rules! impl_from_unsigned_primitive_u8 {
 
 macro_rules! impl_from_unsigned_primitive {
     ($u:ty) => {
-        impl<'a> From<$u> for UnsignedDCNumber<'a> {
+        impl From<$u> for UnsignedDCNumber {
             fn from(n: $u) -> Self {
                 let n_digits = decimal_digits(n as u64) as usize;
                 if n_digits == 0 {
@@ -918,8 +876,8 @@ macro_rules! impl_from_unsigned_primitive {
             }
         }
 
-        impl<'a> Add<$u> for UnsignedDCNumber<'a> {
-            type Output = UnsignedDCNumber<'a>;
+        impl Add<$u> for UnsignedDCNumber {
+            type Output = UnsignedDCNumber;
 
             fn add(self, other: $u) -> Self::Output {
                 // TODO make this more efficient by implementing Add "in place"
@@ -946,14 +904,14 @@ macro_rules! impl_from_unsigned_primitive {
 /// assert_eq!(UnsignedDCNumber::from_str("255").unwrap(), UnsignedDCNumber::from(255 as u8));
 /// ```
 ///
-impl<'a> From<u8> for UnsignedDCNumber<'static> {
+impl From<u8> for UnsignedDCNumber {
     fn from(n: u8) -> Self {
         small_ints::interned(n)
     }
 }
 
-impl<'a> Add<u8> for UnsignedDCNumber<'a> {
-    type Output = UnsignedDCNumber<'a>;
+impl Add<u8> for UnsignedDCNumber {
+    type Output = UnsignedDCNumber;
 
     fn add(self, other: u8) -> Self::Output {
         self + small_ints::interned(other)
@@ -961,14 +919,15 @@ impl<'a> Add<u8> for UnsignedDCNumber<'a> {
 }
 
 
-impl<'a> Mul<u8> for UnsignedDCNumber<'a> {
-    type Output = UnsignedDCNumber<'a>;
+impl Mul<u8> for UnsignedDCNumber {
+    type Output = UnsignedDCNumber;
 
     fn mul(self, other: u8) -> Self::Output {
         // optimize 0, 1, 10, 100
 
-        let mut separator = self.separator;
-        let mut digits = VecDeque::from(self.digits.into_owned());
+        let (v, separator) = self.into_parts();
+        let mut separator = separator;
+        let mut digits  : VecDeque<u8> = VecDeque::from(v);
 
         let mut index = 0;
         loop {
@@ -1072,10 +1031,10 @@ mod radix_converters {
     use super::{ParseDCNumberError, UnsignedDCNumber, small_ints};
 
     pub trait AsciiConverter {
-        fn convert_bytes<'a, 'b>(
+        fn convert_bytes(
             &self,
-            bytes: &'a [u8],
-        ) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError>;
+            bytes: &[u8],
+        ) -> Result<UnsignedDCNumber, ParseDCNumberError>;
     }
 
     #[inline]
@@ -1117,10 +1076,10 @@ mod radix_converters {
     }
 
     impl AsciiConverter for DecAsciiConverter {
-        fn convert_bytes<'a, 'b>(
+        fn convert_bytes(
             &self,
-            bytes: &'a [u8],
-        ) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
+            bytes: &[u8],
+        ) -> Result<UnsignedDCNumber, ParseDCNumberError> {
             if bytes.is_empty() {
                 return Err(ParseDCNumberError::EmptyString);
             }
@@ -1160,10 +1119,10 @@ mod radix_converters {
     }
 
     impl AsciiConverter for RadixAsciiConverter {
-        fn convert_bytes<'a, 'b>(
+        fn convert_bytes(
             &self,
-            bytes: &'a [u8],
-        ) -> Result<UnsignedDCNumber<'b>, ParseDCNumberError> {
+            bytes: &[u8],
+        ) -> Result<UnsignedDCNumber, ParseDCNumberError> {
             let radix = self.radix;
             bytes.iter().fold(Ok(small_ints::zero()), |acc, &ch| {
                 acc.and_then(|n| {
@@ -1175,7 +1134,7 @@ mod radix_converters {
     }
 }
 
-impl<'a> FromBytes for UnsignedDCNumber<'a> {
+impl FromBytes for UnsignedDCNumber {
     type Err = ParseDCNumberError;
 
     fn from_bytes_radix(bytes: &[u8], radix: u32) -> Result<Self, ParseDCNumberError> {
@@ -1268,7 +1227,7 @@ impl<'a> FromBytes for UnsignedDCNumber<'a> {
 
 }
 
-impl<'a> FromStr for UnsignedDCNumber<'a> {
+impl FromStr for UnsignedDCNumber {
     type Err = ParseDCNumberError;
 
     fn from_str(s: &str) -> Result<Self, ParseDCNumberError> {
@@ -1334,7 +1293,7 @@ impl<'a> DCNumberAlignment<'a> {
     }
 
     #[cfg(test)]
-    fn with_unsigned_dcnumbers<'lhs: 'a, 'rhs: 'a>(lhs: &'lhs UnsignedDCNumber<'lhs>, rhs: &'rhs UnsignedDCNumber<'rhs>) -> DCNumberAlignment<'a> {
+    fn with_unsigned_dcnumbers<'lhs: 'a, 'rhs: 'a>(lhs: &'lhs UnsignedDCNumber, rhs: &'rhs UnsignedDCNumber) -> DCNumberAlignment<'a> {
         DCNumberAlignment::with_dcnumbers_parts(
             lhs.digits.as_ref(), lhs.separator,
             rhs.digits.as_ref(), rhs.separator,
@@ -1351,26 +1310,26 @@ mod tests {
     use super::*;
 
     macro_rules! zero_literal {
-        () => (UnsignedDCNumber{digits: [0].as_ref().into(), separator: 1});
+        () => (UnsignedDCNumber{digits: digits![0], separator: 1});
     }
 
     macro_rules! one_literal {
-        () => (UnsignedDCNumber{digits: [1].as_ref().into(), separator: 1});
+        () => (UnsignedDCNumber{digits: digits![1], separator: 1});
     }
 
     #[test]
     fn test_default() {
-        assert_eq!(UnsignedDCNumber{digits: [0].as_ref().into(), separator: 1}, UnsignedDCNumber::default());
+        assert_eq!(UnsignedDCNumber{digits: digits![0], separator: 1}, UnsignedDCNumber::default());
     }
 
     #[test]
     fn test_split() {
-        assert_eq!(([0 as u8].as_ref(), [].as_ref()), small_ints::zero().split());
+        assert_eq!(([0u8].as_ref(), [].as_ref()), small_ints::zero().split());
     }
 
     #[test]
     fn test_split1() {
-        assert_eq!(([1 as u8].as_ref(), [].as_ref()), one_literal!().split());
+        assert_eq!(([1u8].as_ref(), [].as_ref()), one_literal!().split());
     }
 
     #[test]
@@ -1393,8 +1352,8 @@ mod tests {
 
     #[test]
     fn test_align1() {
-        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let m = UnsignedDCNumber::new([7, 8, 9, 2].as_ref(), 3); // 789.2
+        let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2], 3); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1406,8 +1365,8 @@ mod tests {
 
     #[test]
     fn test_align2() {
-        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 3); // 789.2
+        let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 3); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1419,8 +1378,8 @@ mod tests {
 
     #[test]
     fn test_align3() {
-        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 4); // 789.2
+        let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 4); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1433,8 +1392,8 @@ mod tests {
 
     #[test]
     fn test_align4() {
-        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4].as_ref(), 4); // 789.2
+        let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4], 4); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1447,8 +1406,8 @@ mod tests {
 
     #[test]
     fn test_align5() {
-        let m = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let n = UnsignedDCNumber::new([7, 8, 9, 2].as_ref(), 3); // 789.2
+        let m = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let n = UnsignedDCNumber::new(digits![7, 8, 9, 2], 3); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1460,8 +1419,8 @@ mod tests {
 
     #[test]
     fn test_align6() {
-        let m = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let n = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 3); // 789.2
+        let m = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let n = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 3); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1473,8 +1432,8 @@ mod tests {
 
     #[test]
     fn test_align7() {
-        let m = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let n = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4, 5].as_ref(), 4); // 789.2
+        let m = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let n = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 4); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1487,8 +1446,8 @@ mod tests {
 
     #[test]
     fn test_align8() {
-        let n = UnsignedDCNumber::new([1, 2, 3, 4, 5, 6].as_ref(), 4); // 1234.56
-        let m = UnsignedDCNumber::new([7, 8, 9, 2, 3, 4].as_ref(), 4); // 789.2
+        let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4], 4); // 789.2
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1501,8 +1460,8 @@ mod tests {
 
     #[test]
     fn test_align9() {
-        let n = UnsignedDCNumber::new([5, 2, 0].as_ref(), 3);
-        let m = UnsignedDCNumber::new([5, 2, 6].as_ref(), 3);
+        let n = UnsignedDCNumber::new(digits![5, 2, 0], 3);
+        let m = UnsignedDCNumber::new(digits![5, 2, 6], 3);
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1654,7 +1613,7 @@ mod tests {
     #[test]
     fn test_regression_a_16() {
         let n = UnsignedDCNumber::from_str_radix("A", 16).expect("A in hex should be fine");
-        assert_eq!(UnsignedDCNumber::new([1, 0].as_ref(), 2), n);
+        assert_eq!(UnsignedDCNumber::new(digits![1, 0], 2), n);
     }
 
     // TODO: fix me
@@ -1824,6 +1783,8 @@ mod tests {
     test_binop![add_f:10143.043 = 7221.123 + 2921.92];
     test_binop![add_f1:20143.043 = 17221.123 + 2921.92];
     test_binop![add_f2:20143.043 = 7221.123 + 12921.92];
+    test_binop![add_f3b:110 = 101 + 9];
+    test_binop![add_f3c:112 = 103 + 9];
     test_binop![add_f3:110143.043 = 107221.123 + 2921.92];
     test_binop![add_f4:110143.043 = 7221.123 + 102921.92];
     test_binop![add_le:10.1 = 9.9 + 0.2];
@@ -1887,7 +1848,7 @@ mod tests {
     #[test]
     fn test_from_u64_10() {
         let n = UnsignedDCNumber::from(10 as u64);
-        assert_eq!(UnsignedDCNumber::new([1, 0].as_ref(), 2), n);
+        assert_eq!(UnsignedDCNumber::new(digits![1, 0], 2), n);
     }
 
     #[test]
@@ -1900,7 +1861,7 @@ mod tests {
     fn test_from_u64() {
         let n = UnsignedDCNumber::from(1234567890 as u64);
         assert_eq!(
-            UnsignedDCNumber::with_integer_digits([1, 2, 3, 4, 5, 6, 7, 8, 9, 0].as_ref()),
+            UnsignedDCNumber::with_integer_digits(digits![1, 2, 3, 4, 5, 6, 7, 8, 9, 0]),
             n
         );
     }
@@ -2060,11 +2021,11 @@ mod tests {
 
     test_from_bytes![from_str_zero: zero_literal!() ; 0];
     test_from_bytes![from_str_one:  one_literal!() ; 1];
-    test_from_bytes![from_str_10: UnsignedDCNumber::new([1, 0].as_ref(), 2) ; 10];
-    test_from_bytes![from_str_byte_spec: UnsignedDCNumber::new([1, 1].as_ref(), 1) ; 1.1];
-    test_from_bytes![from_str_0dot9: UnsignedDCNumber::new([0, 9].as_ref(), 1) ; 0.9];
-    test_from_bytes![from_str_1000dot3: UnsignedDCNumber::new([1, 0, 0, 0, 3].as_ref(), 4) ; 1000.3];
-    test_from_bytes![from_str_0dot01: UnsignedDCNumber::new([0, 0, 1].as_ref(), 1) ; 0.01];
+    test_from_bytes![from_str_10: UnsignedDCNumber::new(digits![1, 0], 2) ; 10];
+    test_from_bytes![from_str_byte_spec: UnsignedDCNumber::new(digits![1, 1], 1) ; 1.1];
+    test_from_bytes![from_str_0dot9: UnsignedDCNumber::new(digits![0, 9], 1) ; 0.9];
+    test_from_bytes![from_str_1000dot3: UnsignedDCNumber::new(digits![1, 0, 0, 0, 3], 4) ; 1000.3];
+    test_from_bytes![from_str_0dot01: UnsignedDCNumber::new(digits![0, 0, 1], 1) ; 0.01];
     test_from_bytes![from_str_from_int: UnsignedDCNumber::from(1234 as u16) ; 1234 ];
     test_from_bytes![from_str_from_int_leading0: UnsignedDCNumber::from(1234 as u16) ; 01234];
     test_from_bytes![from_str_empty : EmptyString <- ""];
