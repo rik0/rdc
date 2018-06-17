@@ -549,7 +549,7 @@ impl UnsignedDCNumber {
         let UnsignedDCNumber { digits: self_digits, separator: self_separator } = self;
 
         if !self_digits.holds_memory() {
-            if self_digits.len() >= other.digits.len() {
+            if self_digits.len() < other.digits.len() {
                 let UnsignedDCNumber{digits: other_digits, separator: other_separator} = other;
                 let other_digits = other_digits.into_vec();
                 return inner_add_digits_ref(other_digits, other_separator, self_digits.as_ref(), self_separator);
@@ -617,38 +617,6 @@ fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8
 
             debug_assert!(*lhs < 10, "{} < 10", lhs);
         });
-
-
-//    while lhs_aligned_index >= lhs_aligned_end {
-//        debug_assert!(lhs_aligned_index < lhs.len());
-//        debug_assert!(rhs_aligned_index < rhs.len());
-//
-//        debug_assert!(lhs[lhs_aligned_index] < 10, "{} < 10", lhs[lhs_aligned_index]);
-//        debug_assert!(rhs[rhs_aligned_index] < 10);
-//
-//        if carry {
-//            lhs[lhs_aligned_index] += rhs[rhs_aligned_index] + 1;
-//            carry = false;
-//        } else {
-//            lhs[lhs_aligned_index] += rhs[rhs_aligned_index];
-//        }
-//        debug_assert!(lhs[lhs_aligned_index] < 19, "{} < 19", lhs[lhs_aligned_index]);
-//
-//        if lhs[lhs_aligned_index] >= 10 {
-//            lhs[lhs_aligned_index] -= 10;
-//            carry = true;
-//        }
-//
-//        debug_assert!(lhs[lhs_aligned_index] < 10, "{} < 10", lhs[lhs_aligned_index]);
-//
-//        if lhs_aligned_index == 0 || rhs_aligned_index == 0 {
-//            break;
-//        }
-//
-//        lhs_aligned_index -= 1;
-//        rhs_aligned_index -= 1;
-//
-//    }
 
     lhs[0..lhs_aligned_end].iter_mut()
         .rev()
