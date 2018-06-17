@@ -627,21 +627,38 @@ fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8
 
     }
 
-    for index in (0..lhs_aligned_end).rev() {
-        debug_assert!(lhs[index] < 10);
-        if !carry {
-            break;
-        }
-        if lhs[index] == 9 {
-            lhs[index] = 0;
-        } else {
-            lhs[index] += 1;
-            carry = false;
-        }
-        debug_assert!(lhs[index] < 10);
+    if lhs_aligned_index > 0 {
+//        lhs[0..lhs_aligned_end].iter_mut()
+//            .rev()
+//            .scan(carry, |carry, lhs| {
+//                debug_assert!(*lhs < 10);
+//                if *lhs == 9 {
+//                    *lhs = 0;
+//                    Some(())
+//                } else {
+//                    *lhs += 1;
+//                    *carry = false;
+//                    None
+//                }
+//            });
+
+        lhs[0..lhs_aligned_end].iter_mut()
+            .rev()
+            .for_each(|lhs| {
+                debug_assert!(*lhs < 10);
+                if carry {
+                    if *lhs == 9 {
+                        *lhs = 0;
+                    } else {
+                        *lhs += 1;
+                        carry = false;
+                    }
+
+                }
+                debug_assert!(*lhs < 10);
+            });
     }
 
-    // TODO: bug here
     if rhs_aligned_end > 0 {
         lhs.extend(rhs[0..rhs_aligned_end].iter()
             .cloned()
