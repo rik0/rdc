@@ -39,6 +39,12 @@ impl DigitsType {
     }
 }
 
+impl PartialEq for DigitsType {
+    fn eq(&self, other: &DigitsType) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+
 
 impl From<&'static [u8]> for DigitsType {
     fn from(v: &'static [u8]) -> Self {
@@ -132,6 +138,14 @@ mod tests {
 
         assert_eq!(v_addr, v3.as_ptr());
         assert_ne!(v2.as_ptr(), v3.as_ptr());
+    }
+
+    #[test]
+    fn test_macro() {
+        let r = digits!(1, 2, 3);
+        let v = DigitsType::from(vec![1u8, 2, 3]);
+
+        assert_eq!(r, v);
     }
 
 }

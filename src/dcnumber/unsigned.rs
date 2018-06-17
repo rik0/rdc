@@ -573,8 +573,8 @@ fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8
     let lhs_fractional_digits = lhs.len() - lhs_separator;
     let rhs_fractional_digits = rhs.len() - rhs_separator;
 
-    let mut lhs_aligned_index;
-    let mut rhs_aligned_index;
+    let lhs_aligned_index;
+    let rhs_aligned_index;
 
     if lhs_fractional_digits > rhs_fractional_digits {
         let fractional_offset = lhs_fractional_digits - rhs_fractional_digits;
@@ -596,68 +596,75 @@ fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8
         lhs_aligned_end = 0;
     }
 
-    while lhs_aligned_index >= lhs_aligned_end {
-        debug_assert!(lhs_aligned_index < lhs.len());
-        debug_assert!(rhs_aligned_index < rhs.len());
+    lhs[lhs_aligned_end..lhs_aligned_index+1].iter_mut().rev()
+        .zip(rhs[rhs_aligned_end..rhs_aligned_index+1].iter().rev())
+        .for_each(|(lhs, &rhs)| {
+            debug_assert!(*lhs < 10, "{} < 10", lhs);
+            debug_assert!(rhs < 10);
 
-        debug_assert!(lhs[lhs_aligned_index] < 10, "{} < 10", lhs[lhs_aligned_index]);
-        debug_assert!(rhs[rhs_aligned_index] < 10);
+            if carry {
+                *lhs += rhs + 1;
+                carry = false;
+            } else {
+                *lhs += rhs;
+            }
+            debug_assert!(*lhs < 19, "{} < 19", lhs);
 
-        if carry {
-            lhs[lhs_aligned_index] += rhs[rhs_aligned_index] + 1;
-            carry = false;
-        } else {
-            lhs[lhs_aligned_index] += rhs[rhs_aligned_index];
-        }
-        debug_assert!(lhs[lhs_aligned_index] < 19, "{} < 19", lhs[lhs_aligned_index]);
+            if *lhs >= 10 {
+                *lhs -= 10;
+                carry = true;
+            }
 
-        if lhs[lhs_aligned_index] >= 10 {
-            lhs[lhs_aligned_index] -= 10;
-            carry = true;
-        }
+            debug_assert!(*lhs < 10, "{} < 10", lhs);
+        });
 
-        debug_assert!(lhs[lhs_aligned_index] < 10, "{} < 10", lhs[lhs_aligned_index]);
 
-        if lhs_aligned_index == 0 || rhs_aligned_index == 0 {
-            break;
-        }
+//    while lhs_aligned_index >= lhs_aligned_end {
+//        debug_assert!(lhs_aligned_index < lhs.len());
+//        debug_assert!(rhs_aligned_index < rhs.len());
+//
+//        debug_assert!(lhs[lhs_aligned_index] < 10, "{} < 10", lhs[lhs_aligned_index]);
+//        debug_assert!(rhs[rhs_aligned_index] < 10);
+//
+//        if carry {
+//            lhs[lhs_aligned_index] += rhs[rhs_aligned_index] + 1;
+//            carry = false;
+//        } else {
+//            lhs[lhs_aligned_index] += rhs[rhs_aligned_index];
+//        }
+//        debug_assert!(lhs[lhs_aligned_index] < 19, "{} < 19", lhs[lhs_aligned_index]);
+//
+//        if lhs[lhs_aligned_index] >= 10 {
+//            lhs[lhs_aligned_index] -= 10;
+//            carry = true;
+//        }
+//
+//        debug_assert!(lhs[lhs_aligned_index] < 10, "{} < 10", lhs[lhs_aligned_index]);
+//
+//        if lhs_aligned_index == 0 || rhs_aligned_index == 0 {
+//            break;
+//        }
+//
+//        lhs_aligned_index -= 1;
+//        rhs_aligned_index -= 1;
+//
+//    }
 
-        lhs_aligned_index -= 1;
-        rhs_aligned_index -= 1;
-
-    }
-
-    if lhs_aligned_index > 0 {
-//        lhs[0..lhs_aligned_end].iter_mut()
-//            .rev()
-//            .scan(carry, |carry, lhs| {
-//                debug_assert!(*lhs < 10);
-//                if *lhs == 9 {
-//                    *lhs = 0;
-//                    Some(())
-//                } else {
-//                    *lhs += 1;
-//                    *carry = false;
-//                    None
-//                }
-//            });
-
-        lhs[0..lhs_aligned_end].iter_mut()
-            .rev()
-            .for_each(|lhs| {
-                debug_assert!(*lhs < 10);
-                if carry {
-                    if *lhs == 9 {
-                        *lhs = 0;
-                    } else {
-                        *lhs += 1;
-                        carry = false;
-                    }
-
+    lhs[0..lhs_aligned_end].iter_mut()
+        .rev()
+        .for_each(|lhs| {
+            debug_assert!(*lhs < 10);
+            if carry {
+                if *lhs == 9 {
+                    *lhs = 0;
+                } else {
+                    *lhs += 1;
+                    carry = false;
                 }
-                debug_assert!(*lhs < 10);
-            });
-    }
+
+            }
+            debug_assert!(*lhs < 10);
+        });
 
     if rhs_aligned_end > 0 {
         lhs.extend(rhs[0..rhs_aligned_end].iter()
