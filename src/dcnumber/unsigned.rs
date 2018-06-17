@@ -541,13 +541,6 @@ impl UnsignedDCNumber {
 
 
     pub fn dup(&self) -> UnsignedDCNumber {
-//        UnsignedDCNumber{digits: Cow::Borrowed(self.digits.borrow()), separator: self.separator}
-        // TODO inefficient!
-        // TODO one option would be to make sure that this only gives stuff with 'static
-        // maybe we can put it in a trait and implement it only for static
-        // another option is to start using Rc and similar stuff in some combination with Cow
-        // or in isolation... Cow does not really seem to have the right semantics here, we do not
-        // really want to "mutate" existing instances, we always create new stuff...
         UnsignedDCNumber{digits: self.digits.clone(), separator: self.separator}
     }
 

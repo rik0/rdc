@@ -34,7 +34,7 @@ impl DigitsType {
     pub fn holds_memory(&self) -> bool {
         match self {
             DigitsType::Ref(_r) => false,
-            DigitsType::V(rc) => Rc::strong_count(rc) == 1
+            DigitsType::V(ref rc) => Rc::strong_count(rc) == 1
         }
     }
 }
@@ -107,5 +107,31 @@ impl Index<Range<usize>> for DigitsType {
 
 macro_rules! digits {
     ( $( $digits:expr ),* ) => ( DigitsType::from([ $( $digits as u8), * ].as_ref()) )
+
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clone_does_not_allocate() {
+        let v = vec![1, 2, 3];
+        let v_addr = v.as_ptr();
+        let dt = DigitsType::from(v);
+
+        assert!(dt.holds_memory());
+
+        let dt2 = dt.clone();
+
+        assert!(!dt.holds_memory());
+        assert!(!dt2.holds_memory());
+
+        let v2 = dt2.into_vec();
+        let v3 = dt.into_vec();
+
+        assert_eq!(v_addr, v3.as_ptr());
+        assert_ne!(v2.as_ptr(), v3.as_ptr());
+    }
 
 }
