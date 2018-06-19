@@ -534,7 +534,7 @@ impl UnsignedDCNumber {
         }
     }
 
-    fn into_parts(self)  -> (Vec<u8>, usize) {
+    fn clone_into_parts(self) -> (Vec<u8>, usize) {
         let separator = self.separator;
         (self.digits.into_vec(), separator)
     }
@@ -561,6 +561,54 @@ impl UnsignedDCNumber {
 
 
         inner_add_digits_ref(self_digits, self_separator, other.digits.as_ref(), other.separator)
+    }
+
+    fn is_integer(&self) -> bool {
+        self.digits.len() <= self.separator
+    }
+
+    fn _is_zero(&self) -> bool {
+        self.separator == 1 && self.digits.len() == 1 && self.digits.first()
+            .map(|&d| d == 0)
+            .unwrap_or(false)
+   }
+
+    fn mul_10(self) -> Self {
+        if self._is_zero() {
+            return self;
+        }
+        let (mut v, mut separator) = self.clone_into_parts();
+        println!("mul10: {:?} {}", v, separator);
+        if separator >= v.len() {
+            // it is an integer
+            // 1 => 10
+            v.push(0);
+            separator += 1;
+        } else {
+            // this is a fractional number
+            // 0.12 => 1.2
+            // 0.01 => 0.1
+            // 0.1 => 1
+            // 1.1 => 11
+            if v[0] == 0 {
+                let mut dq = VecDeque::from(v);
+                let _ = dq.pop_front();
+                v = Vec::from(dq);
+            } else {
+                separator += 1;
+            }
+        }
+        UnsignedDCNumber { digits: DigitsType::from(v), separator }
+//        } else {
+//            let v = self.digits.into_vec();
+//            if v[0] == 0 {
+//                let mut v = VecDeque::from(v);
+//                v.pop_front();
+//                *self = UnsignedDCNumber { digits: DigitsType: from(v), separator: self.separator - 1 }
+//            }
+//            separator += 1;
+//            return UnsignedDCNumber::new(v, separator);
+//        }
     }
 
 }
@@ -909,9 +957,31 @@ impl Mul<u8> for UnsignedDCNumber {
 
     fn mul(self, other: u8) -> Self::Output {
         // optimize 0, 1, 10, 100
+//        if self.is_zero() {
+//            return self;
+//        }
+//
+//        if self.is_one() {
+//            return UnsignedDCNumber::from(other);
+//        }
 
-        let (v, separator) = self.into_parts();
+        if other == 0 {
+            return small_ints::zero();
+        }
+
+        if other == 1 {
+            return self;
+        }
+
+        if other == 10 {
+            return self.mul_10();
+        }
+
+        let (v, separator) = self.clone_into_parts();
         let mut separator = separator;
+
+
+
         let mut digits  : VecDeque<u8> = VecDeque::from(v);
 
         let mut index = 0;
@@ -1300,6 +1370,16 @@ mod tests {
 
     macro_rules! one_literal {
         () => (UnsignedDCNumber{digits: digits![1], separator: 1});
+    }
+
+    #[test]
+    fn test_is_zero() {
+        let zero = UnsignedDCNumber{digits: digits!(0), separator: 1};
+        assert!(zero._is_zero());
+        let one = UnsignedDCNumber{digits: digits!(1), separator: 1};
+        assert!(!one._is_zero());
+        let zero_dot = UnsignedDCNumber{digits: digits!(0, 1), separator: 1};
+        assert!(!zero_dot._is_zero());
     }
 
     #[test]

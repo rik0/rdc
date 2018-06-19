@@ -3,6 +3,7 @@ use std::ops::Index;
 use std::ops::RangeTo;
 use std::ops::RangeFrom;
 use std::ops::Range;
+use std::ops::Deref;
 
 #[derive(Debug)]
 pub enum DigitsType {
@@ -25,6 +26,15 @@ impl DigitsType {
             DigitsType::Ref(r) => Vec::from(r),
             DigitsType::V(v) => Rc::try_unwrap(v)
                 .unwrap_or_else(|rc| rc.as_ref().clone())
+        }
+    }
+
+    pub fn upgrade(&mut self) {
+        match self {
+            DigitsType::Ref(r) => {
+                *self = DigitsType::V(Rc::from(r.to_vec()));
+            }
+            _ => {}
         }
     }
 
@@ -108,6 +118,17 @@ impl Index<Range<usize>> for DigitsType {
 
     fn index(&self, index: Range<usize>) -> &[u8] {
         &self.as_ref()[index]
+    }
+}
+
+impl Deref for DigitsType {
+    type Target = [u8];
+
+    fn deref(&self) -> &<Self as Deref>::Target {
+        match self {
+            DigitsType::Ref(r) => r,
+            DigitsType::V(v) => v.as_ref()
+        }
     }
 }
 
