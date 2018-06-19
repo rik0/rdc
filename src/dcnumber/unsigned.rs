@@ -599,16 +599,6 @@ impl UnsignedDCNumber {
             }
         }
         UnsignedDCNumber { digits: DigitsType::from(v), separator }
-//        } else {
-//            let v = self.digits.into_vec();
-//            if v[0] == 0 {
-//                let mut v = VecDeque::from(v);
-//                v.pop_front();
-//                *self = UnsignedDCNumber { digits: DigitsType: from(v), separator: self.separator - 1 }
-//            }
-//            separator += 1;
-//            return UnsignedDCNumber::new(v, separator);
-//        }
     }
 
 }

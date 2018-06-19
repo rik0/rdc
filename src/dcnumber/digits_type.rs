@@ -29,18 +29,10 @@ impl DigitsType {
         }
     }
 
-    pub fn upgrade(&mut self) {
-        match self {
-            DigitsType::Ref(r) => {
-                *self = DigitsType::V(Rc::from(r.to_vec()));
-            }
-            _ => {}
-        }
-    }
-
     pub fn len(&self) -> usize {
         self.get_ref().len()
     }
+
     pub fn holds_memory(&self) -> bool {
         match self {
             DigitsType::Ref(_r) => false,
