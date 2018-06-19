@@ -1434,7 +1434,7 @@ mod tests {
     #[test]
     fn test_align3() {
         let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
-        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 4); // 789.2
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 4); // 7892.45
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1448,7 +1448,7 @@ mod tests {
     #[test]
     fn test_align4() {
         let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
-        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4], 4); // 789.2
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4], 4); // 7892.34
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1475,7 +1475,7 @@ mod tests {
     #[test]
     fn test_align6() {
         let m = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
-        let n = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 3); // 789.2
+        let n = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 3); // 789.2345
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1488,7 +1488,7 @@ mod tests {
     #[test]
     fn test_align7() {
         let m = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
-        let n = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 4); // 789.2
+        let n = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4, 5], 4); // 7892.345
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
@@ -1502,7 +1502,7 @@ mod tests {
     #[test]
     fn test_align8() {
         let n = UnsignedDCNumber::new(digits![1, 2, 3, 4, 5, 6], 4); // 1234.56
-        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4], 4); // 789.2
+        let m = UnsignedDCNumber::new(digits![7, 8, 9, 2, 3, 4], 4); // 7892.34
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
