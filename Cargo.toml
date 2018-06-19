@@ -17,3 +17,6 @@ nightly = []
 
 [build-dependencies]
 rustc_version = "0.1.*"
+
+[profile.release]
+debug = true
