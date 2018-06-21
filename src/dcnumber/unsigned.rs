@@ -2321,7 +2321,7 @@ mod tests {
         macro_rules! udcnd {
             ($digits:expr, $separator:expr) => {
                 UnsignedDCNumber{
-                    digits: Cow::Borrowed(&$digits),
+                    digits: DigitsType::from($digits.as_ref()),
                     separator: $separator,
                 }
             }
