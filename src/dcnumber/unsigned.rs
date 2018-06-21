@@ -5,7 +5,7 @@ use std::f32;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
-use std::iter::{self, Iterator};
+use std::iter::Iterator;
 use std::ops::{Add, Mul, Sub, Range};
 use std::str::FromStr;
 
@@ -2173,7 +2173,6 @@ mod tests {
                         black_box(n.dup());
                     });
                     bench_on_integer_inner!(fmt: $n; |n: &UnsignedDCNumber| {
-                        use std::fmt::Display;
                         use std::io::Write;
 
                         let mut buf = Vec::new();
