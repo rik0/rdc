@@ -42,7 +42,8 @@ after_success: |
       git clone ${REMOTE_URL} "${TRAVIS_REPO_SLUG}-bench" && \
       cd  "${TRAVIS_REPO_SLUG}-bench" && \
       # Bench the previous development
-      git checkout development~ && \
+      git fetch origin development && \
+      git checkout development -b prev~ && \
       cargo bench > benches-control && \
       # Bench variable
       git checkout ${TRAVIS_COMMIT} && \
