@@ -53,18 +53,6 @@ unsafe impl Sync for UnsignedDCNumber {
 static_unsigned_dcnumber![MAX_U64; MAX_U64_DIGITS: [u8; 20] = [1,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5]];
 static_unsigned_dcnumber![MAX_I64; MAX_I64_DIGITS: [u8; 19] = [9,2,2,3,3,7,2,0,3,6,8,5,4,7,7,5,8,0,7]];
 
-//lazy_static!{
-//    static ref MAX_U64: UnsignedDCNumber = {
-//        UnsignedDCNumber::new(vec![1u8,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5], 20)
-//    };
-//}
-//
-//lazy_static!{
-//    static ref MAX_I64: UnsignedDCNumber = {
-//        UnsignedDCNumber::new(vec![1u8,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5], 19)
-//    };
-//}
-
 mod small_ints {
     use super::*;
 
@@ -578,7 +566,6 @@ impl UnsignedDCNumber {
             return self;
         }
         let (mut v, mut separator) = self.clone_into_parts();
-        println!("mul10: {:?} {}", v, separator);
         if separator >= v.len() {
             // it is an integer
             // 1 => 10
@@ -777,9 +764,6 @@ impl Display for UnsignedDCNumber {
 }
 
 
-
-
-
 macro_rules! lsd {
     ($n:expr) => {
         ($n % 10) as u8
@@ -971,48 +955,27 @@ impl Mul<u8> for UnsignedDCNumber {
         let mut separator = separator;
 
 
-
+        // TODO: we can do this on demand only if we need to
         let mut digits  : VecDeque<u8> = VecDeque::from(v);
 
-        let mut index = 0;
-        loop {
-            if index >= digits.len() {
-                break;
-            }
+        // TODO try with different values here e.g., u32
+        type MulT = u16;
+        let mut global_result: MulT = 0;
 
-            if digits[index] == 0 {
-                index += 1;
-                continue;
-            }
+        // 1881 = 19 * 99];
 
-            // we are really multiplying two u8 so w need an u16 for the result without error
-            let mut result = digits[index] as u16 * other as u16;
-            {
-                // this handles the current digit, we need to overwrite what was there
-                digits[index] = lsd!(result);
-                result /= 10;
+        digits.iter_mut().rev()
+            .for_each(|d| {
+                global_result += *d as MulT * other as MulT;
+                *d = lsd!(global_result);
+                global_result /= 10;
+            });
 
-                for index in (index.saturating_sub(3)..index).rev() {
-                    digits[index] += lsd![result];
-                    result /= 10;
-
-                    // here we handle the carry
-                    if digits[index] >= 10 {
-                        debug_assert!(digits[index] < 20);
-                        result += 1;
-                        digits[index] -= 10;
-                    }
-                }
-            }
-
-            // if we had "overflow" for this digit, we should create the right
-            while result > 0 {
-                digits.push_front(lsd![result]);
-                separator += 1;
-                index += 1;
-                result /= 10;
-            }
-            index += 1;
+        // if we had "overflow" for this digit, we should create the right
+        while global_result > 0 {
+            digits.push_front(lsd!(global_result));
+            separator += 1;
+            global_result /= 10;
         }
 
         digits
@@ -1364,17 +1327,17 @@ mod tests {
 
     #[test]
     fn test_is_zero() {
-        let zero = UnsignedDCNumber{digits: digits!(0), separator: 1};
+        let zero = UnsignedDCNumber { digits: digits!(0), separator: 1 };
         assert!(zero._is_zero());
-        let one = UnsignedDCNumber{digits: digits!(1), separator: 1};
+        let one = UnsignedDCNumber { digits: digits!(1), separator: 1 };
         assert!(!one._is_zero());
-        let zero_dot = UnsignedDCNumber{digits: digits!(0, 1), separator: 1};
+        let zero_dot = UnsignedDCNumber { digits: digits!(0, 1), separator: 1 };
         assert!(!zero_dot._is_zero());
     }
 
     #[test]
     fn test_default() {
-        assert_eq!(UnsignedDCNumber{digits: digits![0], separator: 1}, UnsignedDCNumber::default());
+        assert_eq!(UnsignedDCNumber { digits: digits![0], separator: 1 }, UnsignedDCNumber::default());
     }
 
     #[test]
@@ -1412,7 +1375,7 @@ mod tests {
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
-        assert_eq!([1,].as_ref(), alignment.leading_digits);
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2].as_ref(), alignment.second_aligned_part);
         assert_eq!([6].as_ref(), alignment.fractional_tail);
@@ -1425,7 +1388,7 @@ mod tests {
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
-        assert_eq!([1,].as_ref(), alignment.leading_digits);
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2, 3].as_ref(), alignment.second_aligned_part);
         assert_eq!([4, 5].as_ref(), alignment.fractional_tail);
@@ -1466,7 +1429,7 @@ mod tests {
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
-        assert_eq!([1,].as_ref(), alignment.leading_digits);
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2].as_ref(), alignment.second_aligned_part);
         assert_eq!([6].as_ref(), alignment.fractional_tail);
@@ -1479,7 +1442,7 @@ mod tests {
 
         let alignment = DCNumberAlignment::with_unsigned_dcnumbers(&n, &m);
 
-        assert_eq!([1,].as_ref(), alignment.leading_digits);
+        assert_eq!([1, ].as_ref(), alignment.leading_digits);
         assert_eq!([2, 3, 4, 5, 6].as_ref(), alignment.aligned_part);
         assert_eq!([7, 8, 9, 2, 3].as_ref(), alignment.second_aligned_part);
         assert_eq!([4, 5].as_ref(), alignment.fractional_tail);
@@ -2129,7 +2092,7 @@ mod tests {
             assert_eq!(i as u64, UnsignedDCNumber::from(i).to_u64().unwrap());
 
             let _ = write!(out, "{}", UnsignedDCNumber::from(i)).expect("write");
-            assert_eq!(i.to_string(), String::from_utf8(out).expect("utf8 issue"),)
+            assert_eq!(i.to_string(), String::from_utf8(out).expect("utf8 issue"), )
         }
     }
 
@@ -2235,5 +2198,5 @@ mod tests {
         assert!(!UnsignedDCNumber::zero().is_one());
         assert!(UnsignedDCNumber::one().is_one());
     }
-
 }
+
