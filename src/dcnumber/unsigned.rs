@@ -2280,10 +2280,12 @@ mod tests {
 
                     #[bench]
                     fn vec(b: &mut Bencher) {
-                        let v = $n.to_vec();
+                        let mut v = $n.to_vec();
 
                         b.iter(|| {
-                            black_box(UnsignedDCNumber::new(v.as_ref(), 0))
+                            let mut v2: Vec<u8> = Vec::new();
+                            ::std::mem::swap(&mut v, &mut v2);
+                            black_box(UnsignedDCNumber::new(v2, 0))
                         });
                     }
 
