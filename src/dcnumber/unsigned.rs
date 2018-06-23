@@ -49,7 +49,6 @@ unsafe impl Sync for UnsignedDCNumber {
 }
 
 
-
 static_unsigned_dcnumber![MAX_U64; MAX_U64_DIGITS: [u8; 20] = [1,8,4,4,6, 7,4,4, 0,7,3, 7,0,9, 5,5,1, 6,1,5]];
 static_unsigned_dcnumber![MAX_I64; MAX_I64_DIGITS: [u8; 19] = [9,2,2,3,3,7,2,0,3,6,8,5,4,7,7,5,8,0,7]];
 
@@ -1161,76 +1160,64 @@ impl FromBytes for UnsignedDCNumber {
             return Err(ParseDCNumberError::EmptyString);
         }
 
-        let mut first_dot: Option<usize> = None;
-        // use vecdeq preferentially
-        let no_digits = bytes.len();
-        let mut digits = Vec::with_capacity(no_digits);
+        let mut lead_zero: usize = 0;
+        // we already know that the string is not empty
+        let mut bytes = bytes.iter() ;
 
-        let mut zero_streak: Option<Range<usize>> = None;
-        let mut seen_non_zero: bool = false;
-        let mut skipped_leading_zeros: usize = 0;
 
-        for (pos, &ch) in bytes.iter().enumerate() {
-            match ch {
-                b'0' => {
-                    zero_streak = match zero_streak {
-                        None => Some(pos..pos + 1),
-                        Some(Range { start, end }) => Some(start..end + 1),
-                    };
+
+        let mut digits : Vec<u8>= bytes
+            .by_ref()
+            .skip_while(|&&d| {
+                if d == b'0' {
+                    lead_zero += 1;
+                    true
+                } else {
+                    false
                 }
-                ch @ b'1'...b'9' => {
-                    if let Some(Range { start, end }) = zero_streak {
-                        // we should do this after the dot in non terminal position
-                        // and before the dot, but only if we have already seen something non zero
-                        debug_assert!(bytes[start..end].iter().all(|&ch| ch == b'0'));
-                        if seen_non_zero || first_dot.is_some() {
-                            digits.extend(iter::repeat(0).take(end - start));
-                        } else if first_dot.is_none() {
-                            skipped_leading_zeros += end - start;
-                        }
-                        zero_streak = None;
-                    }
-                    digits.push(ch - b'0');
-                    seen_non_zero = true;
-                }
-                b'.' => {
-                    if let Some(_) = first_dot {
-                        return Err(ParseDCNumberError::RepeatedDot);
-                    }
-                    if let Some(Range { start, end }) = zero_streak {
-                        // this is a number w
-                        debug_assert!(bytes[start..end].iter().all(|&ch| ch == b'0'));
-                        if seen_non_zero {
-                            digits.extend(iter::repeat(0).take(end - start));
-                        } else {
-                            digits.push(0);
-                            skipped_leading_zeros += (end - start) - 1;
-                        }
-                        zero_streak = None;
-                        first_dot = Some(pos);
-                    } else if !seen_non_zero {
-                        digits.push(0);
-                        first_dot = Some(pos + 1);
-                    } else {
-                        first_dot = Some(pos);
-                    }
-                    seen_non_zero = true;
-                }
-                _ => {
-                    return Err(ParseDCNumberError::InvalidDigit);
+            })
+            .take_while(|&&d| d != b'.')
+            .map(|&d| match d {
+                ch @ b'0'...b'9' => Ok(ch - b'0'),
+                _ => Err(ParseDCNumberError::InvalidDigit),
+            })
+            .collect::<Result<Vec<u8>, _>>()?;
+
+        if digits.is_empty() {
+            digits.push(0);
+        }
+
+        let separator = digits.len();
+
+        digits.extend(bytes
+            .map(|&d| match d {
+            ch @ b'0'...b'9' => Ok(ch - b'0'),
+            b'.' => Err(ParseDCNumberError::RepeatedDot),
+            _ => Err(ParseDCNumberError::InvalidDigit),
+        }).collect::<Result<Vec<u8>, _>>()?);
+
+
+        if let Some(last_non_zero) = digits.iter()
+            .rposition(|&d| d != 0) {
+
+            match last_non_zero.cmp(&separator) {
+                Ordering::Less => {
+                    digits.truncate(separator);
+                },
+                Ordering::Equal => {
+                    digits.truncate(separator+1);
+                },
+                Ordering::Greater => {
+                    digits.truncate(last_non_zero+1);
                 }
             }
-        }
+       }
 
-        // if we are not after a dot, we must consider the zero streak here
-        if let (Some(Range { start, end }), None) = (zero_streak, first_dot) {
-            digits.extend(iter::repeat(0).take(end - start));
-        }
-
-        let separator = first_dot
-            .map(|len| len - skipped_leading_zeros)
-            .unwrap_or(digits.len());
         Ok(UnsignedDCNumber::new(digits, separator))
+
+        // 1. TODO double allocation somewhow
+        // 2. TODO try collecting to iterator
+        // 2b. some odd solution chaining iterators... mah
     }
 
 }
