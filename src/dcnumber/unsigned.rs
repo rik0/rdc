@@ -929,6 +929,7 @@ impl Mul<u8> for UnsignedDCNumber {
     type Output = UnsignedDCNumber;
 
     fn mul(self, other: u8) -> Self::Output {
+        // TODO put us back
         // optimize 0, 1, 10, 100
 //        if self.is_zero() {
 //            return self;
@@ -1189,8 +1190,8 @@ impl FromBytes for UnsignedDCNumber {
 
         let separator = digits.len();
 
-        digits.extend(bytes
-            .map(|&d| match d {
+        digits.extend(bytes//.cloned()
+            .map(|d| match d {
             ch @ b'0'...b'9' => Ok(ch - b'0'),
             b'.' => Err(ParseDCNumberError::RepeatedDot),
             _ => Err(ParseDCNumberError::InvalidDigit),
