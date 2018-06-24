@@ -1157,68 +1157,8 @@ impl FromBytes for UnsignedDCNumber {
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Self, ParseDCNumberError> {
-        if bytes.is_empty() {
-            return Err(ParseDCNumberError::EmptyString);
-        }
-
-        let mut lead_zero: usize = 0;
-        // we already know that the string is not empty
-        let mut bytes = bytes.iter() ;
-
-
-
-        let mut digits : Vec<u8>= bytes
-            .by_ref()
-            .skip_while(|&&d| {
-                if d == b'0' {
-                    lead_zero += 1;
-                    true
-                } else {
-                    false
-                }
-            })
-            .take_while(|&&d| d != b'.')
-            .map(|&d| match d {
-                ch @ b'0'...b'9' => Ok(ch - b'0'),
-                _ => Err(ParseDCNumberError::InvalidDigit),
-            })
-            .collect::<Result<Vec<u8>, _>>()?;
-
-        if digits.is_empty() {
-            digits.push(0);
-        }
-
-        let separator = digits.len();
-
-        digits.extend(bytes//.cloned()
-            .map(|d| match d {
-            ch @ b'0'...b'9' => Ok(ch - b'0'),
-            b'.' => Err(ParseDCNumberError::RepeatedDot),
-            _ => Err(ParseDCNumberError::InvalidDigit),
-        }).collect::<Result<Vec<u8>, _>>()?);
-
-
-        if let Some(last_non_zero) = digits.iter()
-            .rposition(|&d| d != 0) {
-
-            match last_non_zero.cmp(&separator) {
-                Ordering::Less => {
-                    digits.truncate(separator);
-                },
-                Ordering::Equal => {
-                    digits.truncate(separator+1);
-                },
-                Ordering::Greater => {
-                    digits.truncate(last_non_zero+1);
-                }
-            }
-       }
-
-        Ok(UnsignedDCNumber::new(digits, separator))
-
-        // 1. TODO double allocation somewhow
-        // 2. TODO try collecting to iterator
-        // 2b. some odd solution chaining iterators... mah
+        use self::radix_converters::AsciiConverter;
+        radix_converters::DecAsciiConverter::new().convert_bytes(bytes)
     }
 
 }
