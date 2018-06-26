@@ -127,7 +127,6 @@ impl Deref for DigitsType {
 #[allow(unused_macros)]
 macro_rules! digits {
     ( $( $digits:expr ),* ) => ( DigitsType::from([ $( $digits as u8), * ].as_ref()) )
-
 }
 
 #[cfg(test)]

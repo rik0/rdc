@@ -1,7 +1,6 @@
 extern crate rdc;
 
 
-use std::iter;
 use std::error::Error;
 
 use rdc::dcnumber::traits::FromBytes;
