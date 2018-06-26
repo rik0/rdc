@@ -6,7 +6,7 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::iter::Iterator;
-use std::ops::{Add, Mul, Sub, Range};
+use std::ops::{Add, Mul, Sub};
 use std::str::FromStr;
 
 use dcnumber::digits_type::{DigitsType};
@@ -531,6 +531,30 @@ impl UnsignedDCNumber {
         UnsignedDCNumber{digits: self.digits.clone(), separator: self.separator}
     }
 
+    fn inner_binop<F>(self, other: UnsignedDCNumber, f: F) -> Self
+    where
+        F: Fn(Vec<u8>, usize, &[u8], usize) -> Self
+    {
+        let UnsignedDCNumber { digits: self_digits, separator: self_separator } = self;
+
+        if !self_digits.holds_memory() {
+            if self_digits.len() < other.digits.len() {
+                let UnsignedDCNumber{digits: other_digits, separator: other_separator} = other;
+                let other_digits = other_digits.into_vec();
+                return f(other_digits, other_separator, self_digits.as_ref(), self_separator);
+
+            }
+        }
+
+        let self_digits = self_digits.into_vec();
+
+
+        f(self_digits, self_separator, other.digits.as_ref(), other.separator)
+    }
+
+    fn inner_sub(self, other: UnsignedDCNumber) -> Self {
+        self.inner_binop(other, inner_sub_digits_ref)
+    }
 
     fn inner_add(self, other: UnsignedDCNumber) -> Self {
         let UnsignedDCNumber { digits: self_digits, separator: self_separator } = self;
@@ -545,7 +569,6 @@ impl UnsignedDCNumber {
         }
 
         let self_digits = self_digits.into_vec();
-
 
         inner_add_digits_ref(self_digits, self_separator, other.digits.as_ref(), other.separator)
     }
@@ -590,10 +613,7 @@ impl UnsignedDCNumber {
 }
 
 #[inline(always)]
-fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber {
-    let mut carry = false;
-    let mut separator = max(lhs_separator, rhs_separator);
-
+fn align_dcunsigned(lhs: &[u8], lhs_separator: usize, rhs: &[u8], rhs_separator: usize) -> (usize, usize, usize, usize, usize, usize) {
     let lhs_fractional_digits = lhs.len() - lhs_separator;
     let rhs_fractional_digits = rhs.len() - rhs_separator;
 
@@ -619,6 +639,18 @@ fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8
         rhs_aligned_end = rhs_separator - lhs_separator;
         lhs_aligned_end = 0;
     }
+    (lhs_fractional_digits, rhs_fractional_digits, lhs_aligned_index, rhs_aligned_index, lhs_aligned_end, rhs_aligned_end)
+}
+
+#[inline(always)]
+fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber {
+    let mut carry = false;
+    let mut separator = max(lhs_separator, rhs_separator);
+
+    let (
+        lhs_fractional_digits, rhs_fractional_digits, lhs_aligned_index,
+        rhs_aligned_index, lhs_aligned_end, rhs_aligned_end
+    ) = align_dcunsigned(lhs.as_ref(), lhs_separator, rhs, rhs_separator);
 
     lhs[lhs_aligned_end..lhs_aligned_index+1].iter_mut().rev()
         .zip(rhs[rhs_aligned_end..rhs_aligned_index+1].iter().rev())
@@ -688,6 +720,76 @@ fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8
     }
 
     UnsignedDCNumber::new(lhs, separator)
+}
+
+#[inline(always)]
+fn inner_sub_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber {
+    let mut carry = false;
+    let separator = max(lhs_separator, rhs_separator);
+
+    let (
+        lhs_fractional_digits, rhs_fractional_digits, lhs_aligned_index,
+        rhs_aligned_index, lhs_aligned_end, rhs_aligned_end
+    ) = align_dcunsigned(lhs.as_ref(), lhs_separator, rhs, rhs_separator);
+
+    debug_assert!(rhs_aligned_end == 0, "lhs should be > than rhs");
+
+    // First handle the smallest fractional digits
+    // A. if lhs has more fractional digits, there is nothing to do
+    // B. if rhs has more fractional digits, we need to handle it as if
+    //    lhs was padded with 0s
+    let additional_fractional_digits = rhs_fractional_digits.saturating_sub(lhs_fractional_digits);
+    lhs.reserve(additional_fractional_digits);
+
+    lhs.extend(
+        rhs[rhs_aligned_index+1..].iter().rev()
+            .map(|&rhs| {
+                // TODO a faster way to write this is consider
+                // that only for the "last" (largest index) digit we have no carry
+                // if additional_fractional_digits != 0
+                if carry {
+                    carry = true;
+                    9 - rhs
+                } else {
+                    carry = true;
+                    10 - rhs
+                }
+            }).rev());
+
+    lhs[lhs_aligned_end..lhs_aligned_index+1].iter_mut().rev()
+        .zip(rhs[rhs_aligned_end..rhs_aligned_index+1].iter().rev())
+        .for_each(|(lhs, &rhs)| {
+            let wrapped_around = lhs.wrapping_sub(if carry {
+                carry = false;
+                rhs+1
+            } else {rhs});
+            if wrapped_around > 10 {
+                *lhs = wrapped_around.wrapping_add(10);
+                carry = true;
+            } else {
+                *lhs = wrapped_around;
+            }
+        });
+
+    if carry {
+        for lhs in lhs[..lhs_aligned_end].iter_mut().rev() {
+            if !carry { break; }
+            *lhs = lhs.wrapping_sub(1);
+            if *lhs > 10 {
+                *lhs = lhs.wrapping_add(10);
+                carry = true;
+            }
+        }
+
+        if let Some(to_remove) = lhs.iter().position(|&d| d != 0) {
+            let len = lhs.len();
+            lhs.rotate_left(to_remove );
+            lhs.truncate(len - to_remove);
+            return UnsignedDCNumber::new(lhs, separator - to_remove);
+        };
+    }
+
+    return UnsignedDCNumber::new(lhs, separator);
 }
 
 impl Default for UnsignedDCNumber {
@@ -784,8 +886,8 @@ impl Sub<UnsignedDCNumber> for UnsignedDCNumber {
     type Output = UnsignedDCNumber;
 
 
-    fn sub(self, _rhs: UnsignedDCNumber) -> Self {
-        unimplemented!()
+    fn sub(self, rhs: UnsignedDCNumber) -> Self {
+        self.inner_sub(rhs)
     }
 }
 
@@ -1748,6 +1850,20 @@ mod tests {
     test_binop![borrowed badd_unit: 1 = 1 + 0];
     test_binop![borrowed badd_unit2: 1 = 0 + 1];
     test_binop![borrowed bborroweds: 254 = 127 + 127 ];
+
+    test_binop![sub_zero: 0 = 0 - 0];
+    test_binop![simple_9_3: 6 = 9 - 3];
+    test_binop![simple_4_4: 0 = 4 - 4];
+    test_binop![int_carry_10_7: 3 = 10 - 7];
+    test_binop![int_carry_100_3: 97 = 100 - 3];
+    test_binop![int_carry_100_30: 70 = 100 - 30];
+    test_binop![int_carry_200_30: 170 = 200 - 30];
+    test_binop![frac_simple_9_3_0: 6.3 = 9.3 - 3.0];
+    test_binop![frac_simple_9_3: 6.3 = 9.3 - 3];
+    test_binop![frac_carry_10_dot7: 9.3 = 10 - 0.7];
+    test_binop![frac_carry_100_dot3: 99.7 = 100 - 0.3];
+    test_binop![frac_carry_100_dot30: 99.7 = 100 - 0.30];
+    test_binop![frac_carry_103dot23_1dot1: 102.13 = 103.23 - 1.1 ];
 
     mod mul {
         use super::*;
