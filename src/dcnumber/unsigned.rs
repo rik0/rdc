@@ -531,6 +531,7 @@ impl UnsignedDCNumber {
         UnsignedDCNumber{digits: self.digits.clone(), separator: self.separator}
     }
 
+    #[inline]
     fn inner_binop<F>(self, other: UnsignedDCNumber, f: F) -> Self
     where
         F: Fn(Vec<u8>, usize, &[u8], usize) -> Self
@@ -557,20 +558,7 @@ impl UnsignedDCNumber {
     }
 
     fn inner_add(self, other: UnsignedDCNumber) -> Self {
-        let UnsignedDCNumber { digits: self_digits, separator: self_separator } = self;
-
-        if !self_digits.holds_memory() {
-            if self_digits.len() < other.digits.len() {
-                let UnsignedDCNumber{digits: other_digits, separator: other_separator} = other;
-                let other_digits = other_digits.into_vec();
-                return inner_add_digits_ref(other_digits, other_separator, self_digits.as_ref(), self_separator);
-
-            }
-        }
-
-        let self_digits = self_digits.into_vec();
-
-        inner_add_digits_ref(self_digits, self_separator, other.digits.as_ref(), other.separator)
+        self.inner_binop(other, inner_add_digits_ref)
     }
 
     fn is_integer(&self) -> bool {
