@@ -18,6 +18,15 @@ script:
 - cargo build
 - cargo test
 after_success: |
+  if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
+    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
+    cargo tarpaulin --out Xml
+    bash <(curl -s https://codecov.io/bash)
+
+    #curl -o /tmp/travis-automerge https://raw.githubusercontent.com/cdown/travis-automerge/master/travis-automerge
+    #chmod a+x /tmp/travis-automerge
+    #BRANCHES_TO_MERGE_REGEX='^f/' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=rik0/rdc /tmp/travis-automerge
+  fi
   if [ "${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH}" != "development" ] && [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then
       REMOTE_URL="$(git config --get remote.origin.url)";
       # Clone the repository fresh..for some reason checking out master fails
@@ -43,7 +52,7 @@ after_success: |
       cd  "${TRAVIS_REPO_SLUG}-bench" && \
       # Bench the previous development
       git fetch origin development && \
-      git checkout development~ -b prev && \
+      git checkout "${TRAVIS_COMMIT}^1" && \
       cargo bench > benches-control && \
       # Bench variable
       git checkout ${TRAVIS_COMMIT} && \
@@ -51,15 +60,7 @@ after_success: |
       cargo install cargo-benchcmp --force && \
       cargo benchcmp benches-control benches-variable;
   fi
-  if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
-    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
-    cargo tarpaulin --out Xml
-    bash <(curl -s https://codecov.io/bash)
 
-    curl -o /tmp/travis-automerge https://raw.githubusercontent.com/cdown/travis-automerge/master/travis-automerge
-    chmod a+x /tmp/travis-automerge
-    BRANCHES_TO_MERGE_REGEX='^f/' BRANCH_TO_MERGE_INTO=master GITHUB_REPO=rik0/rdc /tmp/travis-automerge
-  fi
 
 env:
   global:
