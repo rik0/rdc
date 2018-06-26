@@ -612,7 +612,7 @@ impl UnsignedDCNumber {
 
 }
 
-#[inline(always)]
+#[inline]
 fn align_dcunsigned(lhs: &[u8], lhs_separator: usize, rhs: &[u8], rhs_separator: usize) -> (usize, usize, usize, usize, usize, usize) {
     let lhs_fractional_digits = lhs.len() - lhs_separator;
     let rhs_fractional_digits = rhs.len() - rhs_separator;
@@ -642,7 +642,7 @@ fn align_dcunsigned(lhs: &[u8], lhs_separator: usize, rhs: &[u8], rhs_separator:
     (lhs_fractional_digits, rhs_fractional_digits, lhs_aligned_index, rhs_aligned_index, lhs_aligned_end, rhs_aligned_end)
 }
 
-#[inline(always)]
+#[inline]
 fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber {
     let mut carry = false;
     let mut separator = max(lhs_separator, rhs_separator);
@@ -722,7 +722,7 @@ fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8
     UnsignedDCNumber::new(lhs, separator)
 }
 
-#[inline(always)]
+#[inline]
 fn inner_sub_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber {
     let mut carry = false;
     let separator = max(lhs_separator, rhs_separator);
