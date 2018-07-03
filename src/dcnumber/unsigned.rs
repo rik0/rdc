@@ -581,7 +581,14 @@ impl UnsignedDCNumber {
         self.separator == 1 && self.digits.len() == 1 && self.digits.first()
             .map(|&d| d == 0)
             .unwrap_or(false)
-   }
+    }
+
+    fn _is_one(&self) -> bool {
+        self.separator == 1 && self.digits.len() == 1 && self.digits.first()
+            .map(|&d| d == 1)
+            .unwrap_or(false)
+    }
+
 
     fn mul_10(self) -> Self {
         if self._is_zero() {
@@ -1031,15 +1038,14 @@ impl Mul<u8> for UnsignedDCNumber {
     type Output = UnsignedDCNumber;
 
     fn mul(self, other: u8) -> Self::Output {
-        // TODO put us back
-        // optimize 0, 1, 10, 100
-//        if self.is_zero() {
-//            return self;
-//        }
-//
-//        if self.is_one() {
-//            return UnsignedDCNumber::from(other);
-//        }
+        // TODO optimize 10, 100
+        if self._is_zero() {
+            return self;
+        }
+
+        if self._is_one() {
+            return UnsignedDCNumber::from(other);
+        }
 
         if other == 0 {
             return small_ints::zero();
