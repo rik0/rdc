@@ -6,7 +6,7 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::iter::Iterator;
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Mul, Sub, AddAssign, SubAssign};
 use std::str::FromStr;
 
 use dcnumber::digits_type::{DigitsType};
@@ -521,9 +521,23 @@ impl UnsignedDCNumber {
         }
     }
 
+    #[inline]
     fn clone_into_parts(self) -> (Vec<u8>, usize) {
         let separator = self.separator;
         (self.digits.into_vec(), separator)
+    }
+
+    #[inline]
+    fn take(&mut self) -> (DigitsType, usize) {
+        let swap = ::std::mem::replace(self, small_ints::zero());
+        let UnsignedDCNumber { digits, separator } = swap;
+        (digits, separator)
+    }
+
+    #[inline]
+    fn take_vec(&mut self) -> (Vec<u8>, usize) {
+        let (digits, separator) = self.take();
+        (digits.into_vec(), separator)
     }
 
 
@@ -641,6 +655,7 @@ fn align_dcunsigned(lhs: &[u8], lhs_separator: usize, rhs: &[u8], rhs_separator:
     }
     (lhs_fractional_digits, rhs_fractional_digits, lhs_aligned_index, rhs_aligned_index, lhs_aligned_end, rhs_aligned_end)
 }
+
 
 #[inline]
 fn inner_add_digits_ref<'b>(mut lhs: Vec<u8>, lhs_separator: usize, rhs: &'b [u8], rhs_separator: usize) -> UnsignedDCNumber {
@@ -885,9 +900,12 @@ impl Mul<UnsignedDCNumber> for UnsignedDCNumber {
 impl Sub<UnsignedDCNumber> for UnsignedDCNumber {
     type Output = UnsignedDCNumber;
 
-
     fn sub(self, rhs: UnsignedDCNumber) -> Self {
-        self.inner_sub(rhs)
+        if self > rhs {
+            self.inner_sub(rhs)
+        } else {
+            small_ints::zero()
+        }
     }
 }
 
@@ -896,6 +914,16 @@ impl Add<UnsignedDCNumber> for UnsignedDCNumber {
 
     fn add(self, other: UnsignedDCNumber) -> Self {
         self.inner_add(other)
+    }
+}
+
+impl<'a> AddAssign for &'a UnsignedDCNumber {
+    fn add_assign(&mut self, rhs: &UnsignedDCNumber) {
+//        let (digits: Vec<u8>, separator: usize) = self.take_vec();
+//        let mut digits = digits;
+//        let result = inner_add_digits_ref(digits, separator,
+//            rhs.digits.as_ref(), rhs.separator
+//        );
     }
 }
 
