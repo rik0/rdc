@@ -1039,13 +1039,6 @@ impl Mul<u8> for UnsignedDCNumber {
 
     fn mul(self, other: u8) -> Self::Output {
         // TODO optimize 10, 100
-        if self._is_zero() {
-            return self;
-        }
-
-        if self._is_one() {
-            return UnsignedDCNumber::from(other);
-        }
 
         if other == 0 {
             return small_ints::zero();
@@ -1058,6 +1051,15 @@ impl Mul<u8> for UnsignedDCNumber {
         if other == 10 {
             return self.mul_10();
         }
+
+        if self._is_zero() {
+            return self;
+        }
+
+        if self._is_one() {
+            return UnsignedDCNumber::from(other);
+        }
+
 
         let (v, separator) = self.clone_into_parts();
         let mut separator = separator;
